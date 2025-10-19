@@ -428,6 +428,14 @@ public class SantoriniGUI extends PApplet {
             initializeGame(2); // 3 Spieler: P1, P2 (Menschen), P3 (KI)
         }
     }
+    private int countPlacedWorkers() {
+        int count = 0;
+        for (String pid : playerIds) {
+            List<Worker> list = board.getWorkersByPlayer(pid);
+            if (list != null) count += list.size();
+        }
+        return count;
+    }
 
 
     private void handlePlacementClick(int c, int r) {
@@ -436,38 +444,43 @@ public class SantoriniGUI extends PApplet {
             logMessage += "\n" + currentPlayerId + " platziert Arbeiter " + (placedWorkersCount + 1) + ": " + coordToNotation(c, r);
             placedWorkersCount++;
 
-            if (placedWorkersCount == workersToPlace) {
-                do {
-                    currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
-                    currentPlayerId = playerIds.get(currentPlayerIndex);
-                    placedWorkersCount = 0;
-
-                    if (agents.containsKey(currentPlayerId)) {
-                        runAiPlacement();
-                    } else {
-                        moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke 2 freie Felder.";
-                        break;
-                    }
-                } while (true);
-
-                // Wenn alle durch sind (wir sind wieder bei P1), beginnt das Spiel
-                if (currentPlayerId.equals("P1") && !placingWorkers) {
-                    placingWorkers = false;
-                    moveEvaluation = "Start P1. Wähle einen Arbeiter.";
-                    phase = GamePhase.MOVE_WORKER;
-                }
+            if (placedWorkersCount < workersToPlace) {
+                // Noch nicht alle Arbeiter gesetzt → bleibe beim gleichen Spieler
+                moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke noch " + (workersToPlace - placedWorkersCount) + " freies Feld.";
+                return;
             }
 
-            else {
-                moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke noch " + (workersToPlace - placedWorkersCount) + " freie Felder.";
+            // Spieler hat beide Arbeiter gesetzt → zum nächsten Spieler wechseln
+            placedWorkersCount = 0;
+            currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
+            currentPlayerId = playerIds.get(currentPlayerIndex);
+
+            // Prüfen, ob alle Spieler platziert haben
+            boolean allPlaced = countPlacedWorkers() == playerIds.size() * workersToPlace;
+
+            if (allPlaced) {
+                placingWorkers = false;
+                moveEvaluation = "Alle Arbeiter platziert! Start P1.";
+                phase = GamePhase.MOVE_WORKER;
+                currentPlayerIndex = 0;
+                currentPlayerId = "P1";
+                return;
+            }
+
+            // Wenn der nächste Spieler eine KI ist → automatisch platzieren
+            if (agents.containsKey(currentPlayerId)) {
+                runAiPlacement();
+            } else {
+                moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke 2 freie Felder.";
             }
         }
     }
 
     private void runAiPlacement() {
         String aiId = currentPlayerId;
+        Random random = new Random();
+
         for (int i = 1; i <= workersToPlace; i++) {
-            Random random = new Random();
             int col, row;
             do {
                 col = random.nextInt(Board.BOARD_SIZE);
@@ -478,18 +491,89 @@ public class SantoriniGUI extends PApplet {
             logMessage += "\n" + aiId + " platziert Arbeiter " + i + ": " + coordToNotation(col, row);
         }
 
-        // Zum nächsten Spieler wechseln
+        // Nächsten Spieler vorbereiten
         currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
         currentPlayerId = playerIds.get(currentPlayerIndex);
 
-        if (currentPlayerId.equals("P1")) {
+        // Prüfen, ob alle platziert sind
+        boolean allPlaced = countPlacedWorkers() == playerIds.size() * workersToPlace;
+
+        if (allPlaced) {
             placingWorkers = false;
-            moveEvaluation = "Start P1. Wähle einen Arbeiter.";
+            moveEvaluation = "Alle Arbeiter platziert! Start P1.";
             phase = GamePhase.MOVE_WORKER;
-        } else {
+            currentPlayerIndex = 0;
+            currentPlayerId = "P1";
+        } else if (agents.containsKey(currentPlayerId)) {
+            // Wenn auch der nächste Spieler eine KI ist, direkt platzieren
             runAiPlacement();
+        } else {
+            moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke 2 freie Felder.";
         }
     }
+
+
+//
+//    private void handlePlacementClick(int c, int r) {
+//        if (!board.isOccupied(c, r)) {
+//            board.placeWorker(currentPlayerId, placedWorkersCount + 1, c, r);
+//            logMessage += "\n" + currentPlayerId + " platziert Arbeiter " + (placedWorkersCount + 1) + ": " + coordToNotation(c, r);
+//            placedWorkersCount++;
+//
+//            if (placedWorkersCount == workersToPlace) {
+//                do {
+//                    currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
+//                    currentPlayerId = playerIds.get(currentPlayerIndex);
+//                    placedWorkersCount = 0;
+//
+//                    if (agents.containsKey(currentPlayerId)) {
+//                        runAiPlacement();
+//                    } else {
+//                        moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke 2 freie Felder.";
+//                        break;
+//                    }
+//                } while (true);
+//
+//                // Wenn alle durch sind (wir sind wieder bei P1), beginnt das Spiel
+//                if (currentPlayerId.equals("P1") && !placingWorkers) {
+//                    placingWorkers = false;
+//                    moveEvaluation = "Start P1. Wähle einen Arbeiter.";
+//                    phase = GamePhase.MOVE_WORKER;
+//                }
+//            }
+//
+//            else {
+//                moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke noch " + (workersToPlace - placedWorkersCount) + " freie Felder.";
+//            }
+//        }
+//    }
+//
+//    private void runAiPlacement() {
+//        String aiId = currentPlayerId;
+//        for (int i = 1; i <= workersToPlace; i++) {
+//            Random random = new Random();
+//            int col, row;
+//            do {
+//                col = random.nextInt(Board.BOARD_SIZE);
+//                row = random.nextInt(Board.BOARD_SIZE);
+//            } while (board.isOccupied(col, row));
+//
+//            board.placeWorker(aiId, i, col, row);
+//            logMessage += "\n" + aiId + " platziert Arbeiter " + i + ": " + coordToNotation(col, row);
+//        }
+//
+//        // Zum nächsten Spieler wechseln
+//        currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
+//        currentPlayerId = playerIds.get(currentPlayerIndex);
+//
+//        if (currentPlayerId.equals("P1")) {
+//            placingWorkers = false;
+//            moveEvaluation = "Start P1. Wähle einen Arbeiter.";
+//            phase = GamePhase.MOVE_WORKER;
+//        } else {
+//            runAiPlacement();
+//        }
+//    }
 
     private void handleGameClick(int c, int r) {
         int[] clickedCoord = new int[]{c, r};
