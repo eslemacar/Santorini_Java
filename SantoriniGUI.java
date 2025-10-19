@@ -69,18 +69,19 @@ public class SantoriniGUI extends PApplet {
     @Override
     public void setup() {
         // Farben initialisieren
-        C_BACKGROUND = color(245, 245, 245);
-        C_GRID = color(100, 100, 100);
-        C_P1 = color(220, 50, 50); // Rot
-        C_P2 = color(50, 50, 220); // Blau
-        C_P3 = color(50, 180, 50); // Grün
-        C_MOVE_TARGET = color(150, 150, 255, 150); // Helles Blau
-        C_BUILD_TARGET = color(255, 180, 100, 150); // Helles Orange
-        C_SELECTED = color(255, 255, 0, 150);
-        C_LEVEL_1 = color(200, 200, 200);
-        C_LEVEL_2 = color(150, 150, 150);
-        C_LEVEL_3 = color(100, 100, 100);
-        C_DOME = color(50, 50, 50);
+        C_BACKGROUND = color(255, 240, 250);   // Heller Rosa-Hintergrund
+        C_GRID = color(200, 150, 200);         // Zartlila Linien
+        C_P1 = color(255, 105, 180);           // Hot Pink
+        C_P2 = color(255, 182, 193);           // Light Pink
+        C_P3 = color(219, 112, 147);           // Pale Violet Red
+        C_MOVE_TARGET = color(255, 182, 255, 150);  // Helles Rosa transparent
+        C_BUILD_TARGET = color(255, 200, 200, 150); // Rosa-Orange transparent
+        C_SELECTED = color(255, 192, 203, 180);     // Rosa transparent
+        C_LEVEL_1 = color(255, 200, 255);      // Helles Rosa
+        C_LEVEL_2 = color(255, 160, 220);      // Mittelrosa
+        C_LEVEL_3 = color(255, 120, 200);      // Intensiver Rosa-Ton
+        C_DOME = color(180, 50, 120);          // Dunkles Pink für Kuppel
+
 
         textAlign(CENTER, CENTER);
         textSize(16);
@@ -94,30 +95,32 @@ public class SantoriniGUI extends PApplet {
      * Startet das Spiel mit der gewählten Anzahl von KI-Gegnern.
      */
     public void initializeGame(int opponents) {
-        this.numOpponents = opponents;
         this.playerIds = new ArrayList<>();
+        this.agents = new HashMap<>();
+
         this.playerIds.add("P1");
-        for (int i = 1; i <= opponents; i++) {
-            this.playerIds.add("P" + (i + 1));
+
+        if (opponents == 1) {
+            // 1 Mensch + 1 KI
+            this.playerIds.add("P2");
+            agents.put("P2", new ReflexAgent("P2"));
+        } else if (opponents == 2) {
+            // 2 Menschen + 1 KI
+            this.playerIds.add("P2");
+            this.playerIds.add("P3");
+            agents.put("P3", new ReflexAgent("P3"));
         }
 
         this.board = new Board(playerIds);
-        this.agents = new HashMap<>();
-
-        // KI-Agenten initialisieren
-        for (int i = 1; i < playerIds.size(); i++) {
-            String pid = playerIds.get(i);
-            // HIER wird der ReflexAgent verwendet. Später hier UtilityAgent einfügen.
-            agents.put(pid, new ReflexAgent(pid));
-        }
 
         this.currentPlayerIndex = 0;
         this.currentPlayerId = playerIds.get(currentPlayerIndex);
         this.placingWorkers = true;
-        this.phase = GamePhase.MOVE_WORKER; // Wechselt direkt zur Platzierung
-        this.moveEvaluation = "Platzierung P1. Klicke 2 freie Felder.";
-        this.logMessage = "Spiel gestartet (" + (opponents + 1) + " Spieler).";
+        this.phase = GamePhase.MOVE_WORKER;
+        this.moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke 2 freie Felder.";
+        this.logMessage = "Spiel gestartet (" + playerIds.size() + " Spieler).";
     }
+
 
     @Override
     public void draw() {
@@ -130,9 +133,12 @@ public class SantoriniGUI extends PApplet {
 
         drawBoard();
         drawLevels();
+        drawBoardLabels();
         drawWorkers();
         drawInteractiveElements();
         drawUI();
+
+
 
         if (gameOver) {
             drawGameOverScreen();
@@ -149,14 +155,15 @@ public class SantoriniGUI extends PApplet {
         textSize(24);
         text("Willkommen bei Santorini!", WINDOW_SIZE / 2, WINDOW_SIZE / 2 - 100);
         textSize(18);
-        text("Wählen Sie die Anzahl der KI-Gegner:", WINDOW_SIZE / 2, WINDOW_SIZE / 2 - 40);
+        text("Wähle Spielmodus:", WINDOW_SIZE / 2, WINDOW_SIZE / 2 - 40);
 
-        // Button 1 Gegner
-        drawButton(WINDOW_SIZE / 2 - 100, WINDOW_SIZE / 2, 150, 40, "1 Gegner (2 Spieler)", 1);
+        // Button: 1 Mensch vs. 1 KI (2 Spieler)
+        drawButton(WINDOW_SIZE / 2 - 120, WINDOW_SIZE / 2, 200, 40, "1 Mensch vs. 1 KI", 2);
 
-        // Button 2 Gegner
-        drawButton(WINDOW_SIZE / 2 + 100, WINDOW_SIZE / 2, 150, 40, "2 Gegner (3 Spieler)", 2);
+        // Button: 2 Menschen vs. 1 KI (3 Spieler)
+        drawButton(WINDOW_SIZE / 2 + 120, WINDOW_SIZE / 2, 200, 40, "2 Menschen vs. 1 KI", 3);
     }
+
 
     private void drawButton(int x, int y, int w, int h, String label, int value) {
         if (mouseX > x - w / 2 && mouseX < x + w / 2 && mouseY > y - h / 2 && mouseY < y + h / 2) {
@@ -186,6 +193,28 @@ public class SantoriniGUI extends PApplet {
             line(BOARD_OFFSET, BOARD_OFFSET + r * CELL_SIZE, BOARD_OFFSET + Board.BOARD_SIZE * CELL_SIZE, BOARD_OFFSET + r * CELL_SIZE);
         }
     }
+    private void drawBoardLabels() {
+        fill(120);  // Farbe der Labels
+        textSize(16);
+        textAlign(CENTER, CENTER);
+
+        // Spalten (a–e) oben
+        for (int c = 0; c < Board.BOARD_SIZE; c++) {
+            char colLabel = (char) ('a' + c);
+            int x = BOARD_OFFSET + c * CELL_SIZE + CELL_SIZE / 2;
+            int y = BOARD_OFFSET - 20;
+            text(String.valueOf(colLabel), x, y);
+        }
+
+        // Zeilen (1–5) links
+        for (int r = 0; r < Board.BOARD_SIZE; r++) {
+            int rowLabel = r + 1;
+            int x = BOARD_OFFSET - 20;
+            int y = WINDOW_SIZE - BOARD_OFFSET - r * CELL_SIZE - CELL_SIZE / 2;
+            text(String.valueOf(rowLabel), x, y);
+        }
+    }
+
 
     private void drawLevels() {
         for (int c = 0; c < Board.BOARD_SIZE; c++) {
@@ -381,21 +410,25 @@ public class SantoriniGUI extends PApplet {
     }
 
     private void handleSetupClick() {
-        int x1 = WINDOW_SIZE / 2 - 100;
-        int y1 = WINDOW_SIZE / 2;
-        int w = 150;
+        int x1 = WINDOW_SIZE / 2 - 120;
+        int x2 = WINDOW_SIZE / 2 + 120;
+        int y = WINDOW_SIZE / 2;
+        int w = 200;
         int h = 40;
 
-        // 1 Gegner Button
-        if (mouseX > x1 - w / 2 && mouseX < x1 + w / 2 && mouseY > y1 - h / 2 && mouseY < y1 + h / 2) {
-            initializeGame(1);
+        if (mouseX > x1 - w / 2 && mouseX < x1 + w / 2 &&
+                mouseY > y - h / 2 && mouseY < y + h / 2) {
+            // 1 Mensch vs 1 KI
+            initializeGame(1); // 2 Spieler: P1 (Mensch), P2 (KI)
         }
-        // 2 Gegner Button
-        int x2 = WINDOW_SIZE / 2 + 100;
-        if (mouseX > x2 - w / 2 && mouseX < x2 + w / 2 && mouseY > y1 - h / 2 && mouseY < y1 + h / 2) {
-            initializeGame(2);
+
+        if (mouseX > x2 - w / 2 && mouseX < x2 + w / 2 &&
+                mouseY > y - h / 2 && mouseY < y + h / 2) {
+            // 2 Menschen vs 1 KI
+            initializeGame(2); // 3 Spieler: P1, P2 (Menschen), P3 (KI)
         }
     }
+
 
     private void handlePlacementClick(int c, int r) {
         if (!board.isOccupied(c, r)) {
@@ -404,19 +437,28 @@ public class SantoriniGUI extends PApplet {
             placedWorkersCount++;
 
             if (placedWorkersCount == workersToPlace) {
-                // Nächster Spieler ist dran
-                currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
-                currentPlayerId = playerIds.get(currentPlayerIndex);
-                placedWorkersCount = 0;
+                do {
+                    currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
+                    currentPlayerId = playerIds.get(currentPlayerIndex);
+                    placedWorkersCount = 0;
 
-                if (currentPlayerId.equals("P1")) {
-                    placingWorkers = false; // Platzierung beendet
+                    if (agents.containsKey(currentPlayerId)) {
+                        runAiPlacement();
+                    } else {
+                        moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke 2 freie Felder.";
+                        break;
+                    }
+                } while (true);
+
+                // Wenn alle durch sind (wir sind wieder bei P1), beginnt das Spiel
+                if (currentPlayerId.equals("P1") && !placingWorkers) {
+                    placingWorkers = false;
                     moveEvaluation = "Start P1. Wähle einen Arbeiter.";
                     phase = GamePhase.MOVE_WORKER;
-                } else {
-                    runAiPlacement();
                 }
-            } else {
+            }
+
+            else {
                 moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke noch " + (workersToPlace - placedWorkersCount) + " freie Felder.";
             }
         }
