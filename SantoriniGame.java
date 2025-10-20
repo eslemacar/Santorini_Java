@@ -18,27 +18,28 @@ public class SantoriniGame {
     // Der Scanner wird nur einmal für System.in initialisiert und übergeben
     private final Scanner scanner;
 
-    public SantoriniGame(int numOpponents, Scanner existingScanner) {
+    public SantoriniGame(int totalPlayers, Scanner existingScanner) {
         this.scanner = existingScanner;
-
-        // P1 ist immer Mensch
         this.playerIds = new ArrayList<>();
-        this.playerIds.add("P1");
-        for (int i = 1; i <= numOpponents; i++) {
-            this.playerIds.add("P" + (i + 1));
-        }
-
-        this.board = new Board(playerIds);
         this.agents = new HashMap<>();
         this.timeBank = new HashMap<>();
 
-        // KI-Agenten initialisieren
-        for (int i = 1; i < playerIds.size(); i++) {
-            String pid = playerIds.get(i);
-            agents.put(pid, new ReflexAgent(pid));
-            timeBank.put(pid, 120.0); // 120 Sekunden Zeitpolster
+        // Spieler anlegen
+        for (int i = 1; i <= totalPlayers; i++) {
+            String pid = "P" + i;
+            playerIds.add(pid);
+
+            // Nur der letzte Spieler ist KI
+            if (i == totalPlayers) {
+                ReflexAgent agent = new ReflexAgent(pid);
+                agents.put(pid, agent);
+                timeBank.put(pid, 120.0);
+            }
         }
+
+        this.board = new Board(playerIds);
     }
+
 
     // --- Spielsteuerung ---
 
@@ -375,23 +376,28 @@ public class SantoriniGame {
 
     public static void main(String[] args) {
         Scanner sharedScanner = new Scanner(System.in);
-        int numOpponents = 0;
+        int numHumans = 0;
 
-        while (numOpponents != 1 && numOpponents != 2) {
-            System.out.print("Möchten Sie gegen 1 (2 Spieler total) oder 2 (3 Spieler total) KI-Gegner spielen? Geben Sie 1 oder 2 ein: ");
+        // Anzahl menschlicher Spieler auswählen
+        while (numHumans != 1 && numHumans != 2) {
+            System.out.print("Möchten Sie mit 1 oder 2 menschlichen Mitspielern spielen (insgesamt also 2 oder 3 Spieler mit KI)? Geben Sie 1 oder 2 ein: ");
             if (sharedScanner.hasNextInt()) {
-                numOpponents = sharedScanner.nextInt();
-                sharedScanner.nextLine(); // Consume newline
-                if (numOpponents != 1 && numOpponents != 2) {
-                    System.out.println("Ungültige Eingabe. Bitte geben Sie 1 oder 2 ein.");
+                numHumans = sharedScanner.nextInt();
+                sharedScanner.nextLine(); // newline entfernen
+                if (numHumans != 1 && numHumans != 2) {
+                    System.out.println("Ungültige Eingabe. Bitte 1 oder 2 eingeben.");
                 }
             } else {
-                System.out.println("Ungültige Eingabe. Bitte geben Sie eine Zahl ein.");
-                sharedScanner.nextLine(); // Consume invalid input
+                System.out.println("Ungültige Eingabe. Bitte eine Zahl eingeben.");
+                sharedScanner.nextLine(); // ungültige Eingabe entfernen
             }
         }
 
-        SantoriniGame game = new SantoriniGame(numOpponents, sharedScanner);
+        // Immer eine KI zusätzlich
+        int totalPlayers = numHumans + 1;
+
+        SantoriniGame game = new SantoriniGame(totalPlayers, sharedScanner);
         game.run();
     }
+
 }
