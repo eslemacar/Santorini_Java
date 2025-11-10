@@ -678,13 +678,25 @@ public class SantoriniGUI extends PApplet {
     }
 
     private void executeMove(String playerId, Move move) {
+        // 1. Board-Zustand vor dem Zug klonen
+        Board before = board.clone();
+
+        // 2. Bewegung und Bauen ausführen
+        board.moveWorker(playerId, move.getMoveFrom(), move.getMoveTo());
+        board.buildStructure(move.getBuildAt());
+
+        // 3. Board-Zustand nach dem Zug klonen
+        Board after = board.clone();
+
+        // 4. Bewertung generieren
+        moveEvaluation = evaluateMove(before, after, move, playerId);
+
+        // 5. Notation fürs Logbuch
         String notation = formatMoveNotation(move);
         logMessage += "\n" + playerId + ": " + notation;
+        logMessage += "\n" + moveEvaluation;
 
-        // 1. Bewegung ausführen
-        board.moveWorker(playerId, move.getMoveFrom(), move.getMoveTo());
-
-        // 2. Gewinn prüfen
+        // 6. Gewinn prüfen
         if (board.checkWin(move.getMoveTo())) {
             gameOver = true;
             winnerId = playerId;
@@ -692,21 +704,87 @@ public class SantoriniGUI extends PApplet {
             return;
         }
 
-        // 3. Bauen ausführen
-        board.buildStructure(move.getBuildAt());
-
-        // Zum nächsten Spieler wechseln
+        // 7. Nächster Spieler
         currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
         currentPlayerId = playerIds.get(currentPlayerIndex);
 
-        // KI-Runde vorbereiten
+        // 8. Nächste Phase / KI-Runde
         if (agents.containsKey(currentPlayerId) && !gameOver) {
             aiThinking = true;
             phase = GamePhase.WAIT_FOR_AI;
         } else if (!gameOver) {
-            moveEvaluation = "Nächster Zug P1. Wähle einen Arbeiter.";
+            moveEvaluation = "Nächster Zug " + currentPlayerId + ". Wähle einen Arbeiter.";
             phase = GamePhase.MOVE_WORKER;
         }
+    }
+
+    private String evaluateMove(Board before, Board after, Move move, String playerId) {
+        int[] from = move.getMoveFrom();
+        int[] to = move.getMoveTo();
+        int[] build = move.getBuildAt();
+
+        int levelBefore = before.getLevel(from[0], from[1]);
+        int levelAfter = after.getLevel(to[0], to[1]);
+
+        StringBuilder eval = new StringBuilder();
+
+        // --- Beschreibung des Zugs ---
+        eval.append(playerId).append(" zieht von ")
+                .append(coordToNotation(from)).append(" nach ").append(coordToNotation(to));
+
+        if (levelAfter > levelBefore) {
+            eval.append(" (steigt auf Level ").append(levelAfter).append(")");
+        }
+
+        eval.append(" und baut auf ").append(coordToNotation(build)).append(". ");
+
+        // --- Heuristische Bewertung ---
+        int score = 0;
+
+        // 1. Aufstieg
+        if (levelAfter > levelBefore) {
+            eval.append("Er steigt höher – das ist gut. ");
+            score += 2;
+        }
+
+        // 2. Bau auf hoher Ebene
+        int buildLevel = before.getLevel(build[0], build[1]);
+        if (buildLevel == 2) {
+            eval.append("Baut auf Level 2 – mögliche Verteidigung. ");
+            score += 1;
+        }
+
+        // 3. Nähe zur Mitte (Positionsbonus)
+        int distCenter = Math.abs(to[0] - 2) + Math.abs(to[1] - 2);
+        if (distCenter <= 1) {
+            eval.append("Kontrolliert das Zentrum. ");
+            score += 1;
+        }
+
+        // 4. Gegner blockiert?
+        boolean blocks = false;
+        for (String pid : playerIds) {
+            if (!pid.equals(playerId)) {
+                for (Worker w : before.getWorkersByPlayer(pid)) {
+                    List<int[]> moves = before.getValidMoveTargets(w.getCoord());
+                    if (!moves.isEmpty() && moves.contains(to)) {
+                        blocks = true;
+                    }
+                }
+            }
+        }
+        if (blocks) {
+            eval.append("Blockiert Gegnerischen Weg. ");
+            score += 2;
+        }
+
+        // 5. Bewertungstext
+        if (score >= 4) eval.append("Sehr starker Zug.");
+        else if (score >= 2) eval.append("Guter Zug.");
+        else if (score >= 0) eval.append("Solider Zug.");
+        else eval.append("Riskanter Zug.");
+
+        return eval.toString();
     }
 
     private void runAiTurn() {

@@ -46,6 +46,13 @@ public class Board {
         return buildingLevels[col][row];
     }
 
+    public void setLevel(int col, int row, int level) {
+        if (isValidCoord(col, row)) {
+            buildingLevels[col][row] = Math.min(level, MAX_LEVEL);
+        }
+    }
+
+
     public boolean isDomed(int col, int row) {
         return getLevel(col, row) == MAX_LEVEL;
     }
@@ -59,6 +66,25 @@ public class Board {
     public boolean checkWin(int[] moveTo) {
         return getLevel(moveTo[0], moveTo[1]) == WIN_LEVEL;
     }
+
+
+    @Override
+    public Board clone() {
+        Board copy = new Board(this.playerIds);
+        for (int c = 0; c < BOARD_SIZE; c++) {
+            for (int r = 0; r < BOARD_SIZE; r++) {
+                copy.setLevel(c, r, this.getLevel(c, r));
+            }
+        }
+        for (String pid : playerIds) {
+            for (Worker w : this.getWorkersByPlayer(pid)) {
+                int[] coord = w.getCoord();
+                copy.placeWorker(pid, w.getWorkerId(), coord[0], coord[1]);
+            }
+        }
+        return copy;
+    }
+
 
     /**
      * Gibt eine Liste aller gültigen Nachbarfelder zurück.
@@ -158,6 +184,7 @@ public class Board {
         }
         return null;
     }
+
 
     // --- Anzeige ---
 
