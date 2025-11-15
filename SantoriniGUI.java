@@ -1,12 +1,10 @@
 import processing.core.PApplet;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 /**
- * Grafische Benutzeroberfläche (GUI) für Santorini unter Verwendung der Processing-Bibliothek (PApplet).
- * Erlaubt das Spielen über Mausklicks und visualisiert die Züge des Reflex Agenten.
- * Achtung: Diese Datei erfordert die Abhängigkeiten Board.java, Worker.java, Move.java und ReflexAgent.java.
+ * Santorini GUI (Processing) — überarbeitete Version mit korrekter Startspieler- und Platzierungs-Logik.
+ * Benötigt: Board.java, Worker.java, Move.java, ReflexAgent.java
  */
 public class SantoriniGUI extends PApplet {
 
@@ -20,22 +18,22 @@ public class SantoriniGUI extends PApplet {
     private Board board;
     private Map<String, ReflexAgent> agents;
     private List<String> playerIds;
-    private int currentPlayerIndex;
-    private String currentPlayerId;
+    private int currentPlayerIndex = 0;
+    private String currentPlayerId = null;
+    private String startPlayerId = null; // gewählter Startspieler
     private boolean gameOver = false;
     private boolean placingWorkers = true;
     private String winnerId = null;
-    private int placedWorkersCount = 0;
+    private int placedWorkersCount = 0; // zählt, wie viele Worker der aktuell menschliche Spieler bereits gesetzt hat
     private final int workersToPlace = 2; // Zwei Arbeiter pro Spieler
-    private int numOpponents = 1;
 
     // --- Interaktions-Status ---
-    private int[] selectedWorkerCoord = null; // [col, row] - Arbeiter, der bewegt wird
-    private int[] moveFromCoord = null;       // [col, row] - Ursprünglicher Standort des Arbeiters
-    private int[] moveToCoord = null;         // [col, row] - Zielstandort nach der Bewegung
+    private int[] selectedWorkerCoord = null; // [col, row]
+    private int[] moveFromCoord = null;
+    private int[] moveToCoord = null;
     private GamePhase phase = GamePhase.SETUP_OPPONENTS;
     private boolean aiThinking = false;
-    private String moveEvaluation = "Willkommen bei Santorini! Wählen Sie die Spieleranzahl.";
+    private String moveEvaluation = "Willkommen bei Santorini! Wähle Spieleranzahl.";
 
     private String logMessage = "";
 
@@ -43,7 +41,8 @@ public class SantoriniGUI extends PApplet {
         MOVE_WORKER,
         CHOOSE_BUILD_TARGET,
         WAIT_FOR_AI,
-        SETUP_OPPONENTS
+        SETUP_OPPONENTS,
+        SETUP_START_PLAYER
     }
 
     // --- Farben ---
@@ -55,11 +54,11 @@ public class SantoriniGUI extends PApplet {
     private int C_MOVE_TARGET;
     private int C_BUILD_TARGET;
     private int C_SELECTED;
-    private int C_LEVEL_1;
-    private int C_LEVEL_2;
-    private int C_LEVEL_3;
+    private int C_LEVEL_1_L; // Level 1 (top)
+    private int C_LEVEL_1_D; // Level 1 (side)
+    private int C_LEVEL_2_L;
+    private int C_LEVEL_3_L;
     private int C_DOME;
-
 
     @Override
     public void settings() {
@@ -69,68 +68,85 @@ public class SantoriniGUI extends PApplet {
     @Override
     public void setup() {
         // Farben initialisieren
-        C_BACKGROUND = color(255, 240, 250);   // Heller Rosa-Hintergrund
-        C_GRID = color(200, 150, 200);         // Zartlila Linien
-        C_P1 = color(255, 105, 180);           // Hot Pink
-        C_P2 = color(255, 182, 193);           // Light Pink
-        C_P3 = color(219, 112, 147);           // Pale Violet Red
-        C_MOVE_TARGET = color(255, 182, 255, 150);  // Helles Rosa transparent
-        C_BUILD_TARGET = color(255, 200, 200, 150); // Rosa-Orange transparent
-        C_SELECTED = color(255, 192, 203, 180);     // Rosa transparent
-        C_LEVEL_1 = color(255, 200, 255);      // Helles Rosa
-        C_LEVEL_2 = color(255, 160, 220);      // Mittelrosa
-        C_LEVEL_3 = color(255, 120, 200);      // Intensiver Rosa-Ton
-        C_DOME = color(180, 50, 120);          // Dunkles Pink für Kuppel
+        C_BACKGROUND = color(255, 240, 250);
+        C_GRID = color(200, 150, 200);
+        C_P1 = color(255, 105, 180);
+        C_P2 = color(255, 182, 193);
+        C_P3 = color(219, 112, 147);
 
+        C_MOVE_TARGET = color(0, 200, 0, 100);
+        C_BUILD_TARGET = color(255, 200, 0, 100);
+        C_SELECTED = color(255, 192, 203, 180);
+
+        C_LEVEL_1_L = color(255, 220, 255);
+        C_LEVEL_1_D = color(220, 190, 220);
+        C_LEVEL_2_L = color(255, 180, 230);
+        C_LEVEL_3_L = color(255, 140, 210);
+        C_DOME = color(180, 50, 120);
 
         textAlign(CENTER, CENTER);
         textSize(16);
 
-        // Initialer Setup-Modus
         phase = GamePhase.SETUP_OPPONENTS;
         logMessage = "Starte Spiel...";
     }
 
     /**
-     * Startet das Spiel mit der gewählten Anzahl von KI-Gegnern.
+     * Initialisiert Spielstruktur (Spielerliste + KI-Objekte) — ruft danach Setup-Phase für Startspielerwahl auf.
      */
-    public void initializeGame(int opponents) {
+    public void setupGameStructure(int opponents) {
         this.playerIds = new ArrayList<>();
         this.agents = new HashMap<>();
-
         this.playerIds.add("P1");
 
         if (opponents == 1) {
-            // 1 Mensch + 1 KI
             this.playerIds.add("P2");
             agents.put("P2", new ReflexAgent("P2"));
         } else if (opponents == 2) {
-            // 2 Menschen + 1 KI
             this.playerIds.add("P2");
             this.playerIds.add("P3");
             agents.put("P3", new ReflexAgent("P3"));
         }
 
         this.board = new Board(playerIds);
-
-        this.currentPlayerIndex = 0;
-        this.currentPlayerId = playerIds.get(currentPlayerIndex);
-        this.placingWorkers = true;
-        this.phase = GamePhase.MOVE_WORKER;
-        this.moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke 2 freie Felder.";
-        this.logMessage = "Spiel gestartet (" + playerIds.size() + " Spieler).";
+        this.phase = GamePhase.SETUP_START_PLAYER;
+        this.moveEvaluation = "Wähle den Startspieler für die Platzierungsphase.";
+        this.logMessage = "Spielmodus gewählt (" + playerIds.size() + " Spieler).";
     }
 
+    /**
+     * Startet Platzierungsphase mit dem gewählten Startspieler.
+     */
+    public void initializePlacement(String startingPlayerId) {
+        this.startPlayerId = startingPlayerId;
+        this.currentPlayerId = startingPlayerId;
+        this.currentPlayerIndex = playerIds.indexOf(startingPlayerId);
+
+        this.placingWorkers = true;
+        this.phase = GamePhase.MOVE_WORKER;
+        this.moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke " + workersToPlace + " freie Felder.";
+        this.logMessage += "\nStartspieler: " + startingPlayerId;
+
+        // Wenn Startspieler KI ist, platziere automatisiert (und ggf. weitere KIs)
+        if (agents.containsKey(currentPlayerId)) {
+            runAiPlacementLoop();
+        } else {
+            // mensch beginnt Platzierung: ensure placedWorkersCount reset
+            placedWorkersCount = 0;
+        }
+    }
 
     @Override
     public void draw() {
         background(C_BACKGROUND);
 
-        if (board == null) {
+        // Setup-Screens
+        if (phase == GamePhase.SETUP_OPPONENTS || phase == GamePhase.SETUP_START_PLAYER) {
             drawSetupScreen();
             return;
         }
 
+        // Haupt-Rendering
         drawBoard();
         drawLevels();
         drawBoardLabels();
@@ -138,13 +154,10 @@ public class SantoriniGUI extends PApplet {
         drawInteractiveElements();
         drawUI();
 
-
-
         if (gameOver) {
             drawGameOverScreen();
         } else if (aiThinking) {
-            // Führe den KI-Zug in einem separaten Thread oder synchron aus.
-            // Achtung: Processing ist empfindlich bzgl. Threads, wir führen es synchron aus.
+            // KI-Zug synchron ausführen (Processing-thread-sensibel)
             runAiTurn();
         }
     }
@@ -155,17 +168,24 @@ public class SantoriniGUI extends PApplet {
         textSize(24);
         text("Willkommen bei Santorini!", WINDOW_SIZE / 2, WINDOW_SIZE / 2 - 100);
         textSize(18);
-        text("Wähle Spielmodus:", WINDOW_SIZE / 2, WINDOW_SIZE / 2 - 40);
 
-        // Button: 1 Mensch vs. 1 KI (2 Spieler)
-        drawButton(WINDOW_SIZE / 2 - 120, WINDOW_SIZE / 2, 200, 40, "1 Mensch vs. 1 KI", 2);
-
-        // Button: 2 Menschen vs. 1 KI (3 Spieler)
-        drawButton(WINDOW_SIZE / 2 + 120, WINDOW_SIZE / 2, 200, 40, "2 Menschen vs. 1 KI", 3);
+        if (phase == GamePhase.SETUP_OPPONENTS) {
+            text("Wähle Spielmodus:", WINDOW_SIZE / 2, WINDOW_SIZE / 2 - 40);
+            drawButton(WINDOW_SIZE / 2 - 120, WINDOW_SIZE / 2, 200, 40, "1 Mensch vs. 1 KI", 1);
+            drawButton(WINDOW_SIZE / 2 + 120, WINDOW_SIZE / 2, 200, 40, "2 Menschen vs. 1 KI", 2);
+        } else if (phase == GamePhase.SETUP_START_PLAYER) {
+            text("Wähle den Startspieler:", WINDOW_SIZE / 2, WINDOW_SIZE / 2 - 40);
+            int offset = 120;
+            int buttonWidth = 120;
+            for (int i = 0; i < playerIds.size(); i++) {
+                String pid = playerIds.get(i);
+                int x = WINDOW_SIZE / 2 - offset * (playerIds.size() - 1) / 2 + offset * i;
+                drawButton(x, WINDOW_SIZE / 2, buttonWidth, 40, pid + (agents.containsKey(pid) ? " (KI)" : " (Mensch)"), pid);
+            }
+        }
     }
 
-
-    private void drawButton(int x, int y, int w, int h, String label, int value) {
+    private void drawButton(int x, int y, int w, int h, String label, Object value) {
         if (mouseX > x - w / 2 && mouseX < x + w / 2 && mouseY > y - h / 2 && mouseY < y + h / 2) {
             fill(C_P1);
         } else {
@@ -173,7 +193,6 @@ public class SantoriniGUI extends PApplet {
         }
         rectMode(CENTER);
         rect(x, y, w, h, 8);
-
         fill(255);
         textSize(16);
         text(label, x, y);
@@ -193,36 +212,30 @@ public class SantoriniGUI extends PApplet {
             line(BOARD_OFFSET, BOARD_OFFSET + r * CELL_SIZE, BOARD_OFFSET + Board.BOARD_SIZE * CELL_SIZE, BOARD_OFFSET + r * CELL_SIZE);
         }
     }
+
     private void drawBoardLabels() {
-        fill(120);  // Farbe der Labels
+        fill(120);
         textSize(16);
         textAlign(CENTER, CENTER);
-
-        // Spalten (a–e) oben
         for (int c = 0; c < Board.BOARD_SIZE; c++) {
             char colLabel = (char) ('a' + c);
             int x = BOARD_OFFSET + c * CELL_SIZE + CELL_SIZE / 2;
             int y = BOARD_OFFSET - 20;
             text(String.valueOf(colLabel), x, y);
         }
-
-        // Zeilen (1–5) links
         for (int r = 0; r < Board.BOARD_SIZE; r++) {
-            int rowLabel = r + 1;
+            int rowLabel = Board.BOARD_SIZE - r;
             int x = BOARD_OFFSET - 20;
             int y = WINDOW_SIZE - BOARD_OFFSET - r * CELL_SIZE - CELL_SIZE / 2;
             text(String.valueOf(rowLabel), x, y);
         }
     }
 
-
     private void drawLevels() {
         for (int c = 0; c < Board.BOARD_SIZE; c++) {
             for (int r = 0; r < Board.BOARD_SIZE; r++) {
                 int level = board.getLevel(c, r);
-                if (level > 0) {
-                    drawStructure(c, r, level);
-                }
+                if (level > 0) drawStructure(c, r, level);
             }
         }
     }
@@ -231,30 +244,26 @@ public class SantoriniGUI extends PApplet {
         int x = BOARD_OFFSET + col * CELL_SIZE;
         int y = WINDOW_SIZE - BOARD_OFFSET - (row + 1) * CELL_SIZE;
         int w = CELL_SIZE;
-
-        // Visualisiere die 3D-Struktur (vereinfacht)
         for (int l = 1; l <= level; l++) {
-            int cx = x + w / 2;
-            int cy = y + w / 2; // y-Koordinate des Zentrums
-
-            // Reduzierte Größe für höhere Level
             int s = (int) (w * (1.0 - 0.1 * (l - 1)));
-
-            if (l == 1) fill(C_LEVEL_1);
-            else if (l == 2) fill(C_LEVEL_2);
-            else if (l == 3) fill(C_LEVEL_3);
-            else if (l == Board.MAX_LEVEL) fill(C_DOME);
-
-            if (l == Board.MAX_LEVEL) {
+            float offset = (w - s) / 2.0f;
+            noStroke();
+            rectMode(CORNER);
+            if (l < Board.MAX_LEVEL) {
+                int sideColor = (l == 1) ? C_LEVEL_1_D : (l == 2) ? color(red(C_LEVEL_2_L) * 0.8f, green(C_LEVEL_2_L) * 0.8f, blue(C_LEVEL_2_L) * 0.8f) : color(red(C_LEVEL_3_L) * 0.8f, green(C_LEVEL_3_L) * 0.8f, blue(C_LEVEL_3_L) * 0.8f);
+                fill(sideColor);
+                rect(x + offset + 1, y + offset + 3, s - 2, s - 2, 4);
+                int topColor = (l == 1) ? C_LEVEL_1_L : (l == 2) ? C_LEVEL_2_L : C_LEVEL_3_L;
+                fill(topColor);
+                rect(x + offset, y + offset, s - 2, s - 2, 4);
+            } else {
+                int cx = x + w / 2;
+                int cy = y + w / 2;
+                fill(C_DOME);
                 ellipse(cx, cy, s, s);
                 fill(255);
                 textSize(14);
                 text("D", cx, cy);
-            } else {
-                rectMode(CORNER);
-                noStroke();
-                float offset = (float) (w - s) / 2;
-                rect(x + offset, y + offset, s, s, 5);
             }
         }
     }
@@ -262,21 +271,21 @@ public class SantoriniGUI extends PApplet {
     private void drawWorkers() {
         for (String pid : playerIds) {
             int color = getColorForPlayer(pid);
-            for (Worker worker : board.getWorkersByPlayer(pid)) {
+            List<Worker> list = board.getWorkersByPlayer(pid);
+            if (list == null) continue;
+            for (Worker worker : list) {
                 int c = worker.getCoord()[0];
                 int r = worker.getCoord()[1];
-
                 int x = BOARD_OFFSET + c * CELL_SIZE + CELL_SIZE / 2;
                 int y = WINDOW_SIZE - BOARD_OFFSET - r * CELL_SIZE - CELL_SIZE / 2;
-
-                // Arbeiter zeichnen (Kreis)
                 fill(color);
+                stroke(255);
+                strokeWeight(2);
                 ellipse(x, y, CELL_SIZE * 0.4f, CELL_SIZE * 0.4f);
-
-                // Arbeiter-ID zeichnen
                 fill(255);
+                noStroke();
                 textSize(16);
-                text(pid.substring(1) + worker.getWorkerId(), x, y);
+                text(String.valueOf(worker.getWorkerId()), x, y);
             }
         }
     }
@@ -293,64 +302,54 @@ public class SantoriniGUI extends PApplet {
     private void drawInteractiveElements() {
         if (gameOver || placingWorkers || phase == GamePhase.WAIT_FOR_AI || agents.containsKey(currentPlayerId)) return;
 
-        // 1. Hervorhebung des ausgewählten Arbeiters
-        if (selectedWorkerCoord != null) {
-            highlightCell(selectedWorkerCoord[0], selectedWorkerCoord[1], C_SELECTED);
-        }
-
-        // 2. Hervorhebung gültiger Ziele
         if (selectedWorkerCoord != null && phase == GamePhase.MOVE_WORKER) {
             List<int[]> moveTargets = board.getValidMoveTargets(selectedWorkerCoord);
-            for (int[] target : moveTargets) {
-                highlightCell(target[0], target[1], C_MOVE_TARGET);
-            }
+            for (int[] target : moveTargets) highlightCell(target[0], target[1], C_MOVE_TARGET, color(0,200,0), 4);
         }
 
         if (moveToCoord != null && phase == GamePhase.CHOOSE_BUILD_TARGET) {
-            // Korrektur: Die Build-Targets müssen vom neuen Standort (moveToCoord) aus berechnet werden.
             List<int[]> buildTargets = board.getValidBuildTargets(moveToCoord);
-
-            // Erlauben Sie auch das Bauen auf moveFromCoord (wo der Arbeiter vorher stand)
-            boolean canBuildOnMoveFrom = true;
-
             for (int[] target : buildTargets) {
-                // Nur hervorheben, wenn es nicht von einem anderen Arbeiter besetzt ist (KI ist immer korrekt)
-                String workerAtTarget = board.getWorkerIdAt(target[0], target[1]);
-                if (workerAtTarget == null || (moveFromCoord != null && Arrays.equals(target, moveFromCoord))) {
-                    highlightCell(target[0], target[1], C_BUILD_TARGET);
-                }
+                boolean valid = isBuildTargetValid(moveToCoord, moveFromCoord, target);
+                if (valid) highlightCell(target[0], target[1], C_BUILD_TARGET, color(255,200,0), 4);
             }
+            if (moveFromCoord != null && isBuildTargetValid(moveToCoord, moveFromCoord, moveFromCoord)) {
+                highlightCell(moveFromCoord[0], moveFromCoord[1], C_BUILD_TARGET, color(255,200,0), 4);
+            }
+        }
+
+        if (selectedWorkerCoord != null) {
+            highlightCell(selectedWorkerCoord[0], selectedWorkerCoord[1], C_SELECTED, color(255), 4);
         }
     }
 
-    private void highlightCell(int c, int r, int highlightColor) {
+    private void highlightCell(int c, int r, int fillColor, int strokeColor, int weight) {
         int x = BOARD_OFFSET + c * CELL_SIZE;
         int y = WINDOW_SIZE - BOARD_OFFSET - (r + 1) * CELL_SIZE;
-
         noStroke();
-        fill(highlightColor);
+        fill(fillColor);
         rectMode(CORNER);
+        rect(x, y, CELL_SIZE, CELL_SIZE);
+        stroke(strokeColor);
+        strokeWeight(weight);
+        noFill();
         rect(x, y, CELL_SIZE, CELL_SIZE);
     }
 
     private void drawUI() {
         int uiX = WINDOW_SIZE + BOARD_OFFSET;
-
         fill(0);
         textSize(20);
         textAlign(CENTER, CENTER);
         text("Santorini Spiel", uiX + 100, 30);
-
         textSize(18);
-        text("Am Zug: " + currentPlayerId + (agents.containsKey(currentPlayerId) ? " (KI)" : " (Mensch)"),
-                uiX + 100, 80);
+        text("Am Zug: " + (currentPlayerId == null ? "—" : currentPlayerId + (agents.containsKey(currentPlayerId) ? " (KI)" : " (Mensch)")), uiX + 100, 80);
 
-        // Zugbewertung
+        // Bewertung
         fill(255);
         stroke(0);
         rectMode(CORNER);
         rect(uiX, 120, 200, 100, 5);
-
         fill(0);
         textSize(14);
         textAlign(LEFT, TOP);
@@ -358,7 +357,7 @@ public class SantoriniGUI extends PApplet {
         textSize(12);
         text(moveEvaluation, uiX + 5, 145, 190, 70);
 
-        // Spiel-Logbuch
+        // Log
         fill(255);
         stroke(0);
         rect(uiX, 250, 200, 500, 5);
@@ -373,23 +372,21 @@ public class SantoriniGUI extends PApplet {
     private void drawGameOverScreen() {
         fill(0, 150);
         rect(0, 0, width, height);
-
         fill(255);
         textSize(48);
         text("SPIEL VORBEI", WINDOW_SIZE / 2, WINDOW_SIZE / 2 - 50);
-
         textSize(32);
         text("Gewinner: " + winnerId, WINDOW_SIZE / 2, WINDOW_SIZE / 2 + 20);
     }
 
-    // --- Maus- und Klick-Logik ---
+    // --- Maus & Klicks ---
 
     @Override
     public void mouseClicked() {
         if (gameOver) return;
 
-        // --- SETUP-SCREEN KLICK ---
-        if (board == null) {
+        // Setup-Screen clicks
+        if (phase == GamePhase.SETUP_OPPONENTS || phase == GamePhase.SETUP_START_PLAYER) {
             handleSetupClick();
             return;
         }
@@ -400,34 +397,45 @@ public class SantoriniGUI extends PApplet {
         int r = coord[1];
 
         if (placingWorkers) {
-            handlePlacementClick(c, r);
+            // Mensch platziert
+            if (!agents.containsKey(currentPlayerId)) {
+                handlePlacementClick(c, r);
+            }
         } else if (agents.containsKey(currentPlayerId)) {
-            // KI-Runde, Klick ignorieren
+            // KI am Zug -> Klicks ignorieren
         } else {
-            // Menschliche Runde
+            // Menschlicher Zug
             handleGameClick(c, r);
         }
     }
 
     private void handleSetupClick() {
-        int x1 = WINDOW_SIZE / 2 - 120;
-        int x2 = WINDOW_SIZE / 2 + 120;
         int y = WINDOW_SIZE / 2;
-        int w = 200;
         int h = 40;
 
-        if (mouseX > x1 - w / 2 && mouseX < x1 + w / 2 &&
-                mouseY > y - h / 2 && mouseY < y + h / 2) {
-            // 1 Mensch vs 1 KI
-            initializeGame(1); // 2 Spieler: P1 (Mensch), P2 (KI)
-        }
-
-        if (mouseX > x2 - w / 2 && mouseX < x2 + w / 2 &&
-                mouseY > y - h / 2 && mouseY < y + h / 2) {
-            // 2 Menschen vs 1 KI
-            initializeGame(2); // 3 Spieler: P1, P2 (Menschen), P3 (KI)
+        if (phase == GamePhase.SETUP_OPPONENTS) {
+            int w = 200;
+            int x1 = WINDOW_SIZE / 2 - 120;
+            int x2 = WINDOW_SIZE / 2 + 120;
+            if (mouseX > x1 - w / 2 && mouseX < x1 + w / 2 && mouseY > y - h / 2 && mouseY < y + h / 2) {
+                setupGameStructure(1);
+            } else if (mouseX > x2 - w / 2 && mouseX < x2 + w / 2 && mouseY > y - h / 2 && mouseY < y + h / 2) {
+                setupGameStructure(2);
+            }
+        } else if (phase == GamePhase.SETUP_START_PLAYER) {
+            int offset = 120;
+            int buttonWidth = 120;
+            for (int i = 0; i < playerIds.size(); i++) {
+                String pid = playerIds.get(i);
+                int x = WINDOW_SIZE / 2 - offset * (playerIds.size() - 1) / 2 + offset * i;
+                if (mouseX > x - buttonWidth / 2 && mouseX < x + buttonWidth / 2 && mouseY > y - h / 2 && mouseY < y + h / 2) {
+                    initializePlacement(pid);
+                    return;
+                }
+            }
         }
     }
+
     private int countPlacedWorkers() {
         int count = 0;
         for (String pid : playerIds) {
@@ -437,143 +445,101 @@ public class SantoriniGUI extends PApplet {
         return count;
     }
 
+    // --- KI-Platzierung: läuft so lange weiter, wie der aktuelle Spieler eine KI ist und noch nicht alle platziert sind ---
+    private void runAiPlacementLoop() {
+        Random random = new Random();
+
+        while (true) {
+            // Falls schon alle platziert -> brechen
+            if (countPlacedWorkers() == playerIds.size() * workersToPlace) break;
+
+            // Wenn aktueller Spieler keine KI ist -> Menschen-Platzierung abwarten
+            if (!agents.containsKey(currentPlayerId)) {
+                // Reset counter für menschlichen Spieler
+                placedWorkersCount = board.getWorkersByPlayer(currentPlayerId) == null ? 0 : board.getWorkersByPlayer(currentPlayerId).size();
+                break;
+            }
+
+            // Setze beide Arbeiter der KI (falls noch nicht gesetzt)
+            int already = board.getWorkersByPlayer(currentPlayerId) == null ? 0 : board.getWorkersByPlayer(currentPlayerId).size();
+            for (int i = already + 1; i <= workersToPlace; i++) {
+                int col, row;
+                do {
+                    col = random.nextInt(Board.BOARD_SIZE);
+                    row = random.nextInt(Board.BOARD_SIZE);
+                } while (board.isOccupied(col, row));
+                board.placeWorker(currentPlayerId, i, col, row);
+                logMessage += "\n" + currentPlayerId + " platziert Arbeiter " + i + ": " + coordToNotation(col, row);
+            }
+
+            // Weiter zum nächsten Spieler
+            currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
+            currentPlayerId = playerIds.get(currentPlayerIndex);
+        }
+
+        // Falls jetzt alle platziert wurden -> Platzierungsphase abschließen und Startspieler setzen
+        boolean allPlaced = countPlacedWorkers() == playerIds.size() * workersToPlace;
+        if (allPlaced) {
+            placingWorkers = false;
+            // Stelle sicher, dass currentPlayerId auf den gewählten Startspieler gesetzt ist
+            currentPlayerIndex = playerIds.indexOf(startPlayerId);
+            currentPlayerId = startPlayerId;
+            moveEvaluation = "Alle Arbeiter platziert! " + currentPlayerId + " beginnt.";
+
+            phase = GamePhase.MOVE_WORKER;
+            // Wenn der Startspieler eine KI ist, sofort KI-Zug starten
+            if (agents.containsKey(currentPlayerId)) {
+                aiThinking = true;
+                phase = GamePhase.WAIT_FOR_AI;
+            }
+        } else {
+            // Noch nicht alle platziert → menschlicher Spieler dran (currentPlayerId ist bereits korrekt)
+            moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke " + (workersToPlace - (board.getWorkersByPlayer(currentPlayerId) == null ? 0 : board.getWorkersByPlayer(currentPlayerId).size())) + " freie Felder.";
+        }
+    }
 
     private void handlePlacementClick(int c, int r) {
         if (!board.isOccupied(c, r)) {
-            board.placeWorker(currentPlayerId, placedWorkersCount + 1, c, r);
-            logMessage += "\n" + currentPlayerId + " platziert Arbeiter " + (placedWorkersCount + 1) + ": " + coordToNotation(c, r);
+            // Setze Arbeiter für aktuellen menschlichen Spieler
+            int idForThisPlayer = board.getWorkersByPlayer(currentPlayerId) == null ? 1 : board.getWorkersByPlayer(currentPlayerId).size() + 1;
+            board.placeWorker(currentPlayerId, idForThisPlayer, c, r);
+            logMessage += "\n" + currentPlayerId + " platziert Arbeiter " + idForThisPlayer + ": " + coordToNotation(c, r);
             placedWorkersCount++;
 
             if (placedWorkersCount < workersToPlace) {
-                // Noch nicht alle Arbeiter gesetzt → bleibe beim gleichen Spieler
-                moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke noch " + (workersToPlace - placedWorkersCount) + " freies Feld.";
+                moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke noch " + (workersToPlace - placedWorkersCount) + " freie Felder.";
                 return;
             }
 
-            // Spieler hat beide Arbeiter gesetzt → zum nächsten Spieler wechseln
+            // beide Arbeiter des aktuellen Menschen gesetzt -> zum nächsten Spieler
             placedWorkersCount = 0;
             currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
             currentPlayerId = playerIds.get(currentPlayerIndex);
 
-            // Prüfen, ob alle Spieler platziert haben
-            boolean allPlaced = countPlacedWorkers() == playerIds.size() * workersToPlace;
-
-            if (allPlaced) {
-                placingWorkers = false;
-                moveEvaluation = "Alle Arbeiter platziert! Start P1.";
-                phase = GamePhase.MOVE_WORKER;
-                currentPlayerIndex = 0;
-                currentPlayerId = "P1";
+            // Wenn der nächste Spieler eine KI ist -> KI-Platzierungsschleife starten
+            if (agents.containsKey(currentPlayerId)) {
+                runAiPlacementLoop();
                 return;
             }
 
-            // Wenn der nächste Spieler eine KI ist → automatisch platzieren
-            if (agents.containsKey(currentPlayerId)) {
-                runAiPlacement();
-            } else {
-                moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke 2 freie Felder.";
+            // Prüfen, ob alle platziert sind (falls nach KI-Platzierung alle fertig wurden)
+            boolean allPlaced = countPlacedWorkers() == playerIds.size() * workersToPlace;
+            if (allPlaced) {
+                placingWorkers = false;
+                currentPlayerIndex = playerIds.indexOf(startPlayerId);
+                currentPlayerId = startPlayerId;
+                moveEvaluation = "Alle Arbeiter platziert! " + currentPlayerId + " beginnt.";
+                phase = GamePhase.MOVE_WORKER;
+                if (agents.containsKey(currentPlayerId)) {
+                    aiThinking = true;
+                    phase = GamePhase.WAIT_FOR_AI;
+                }
+                return;
             }
-        }
-    }
 
-    private void runAiPlacement() {
-        String aiId = currentPlayerId;
-        Random random = new Random();
-
-        for (int i = 1; i <= workersToPlace; i++) {
-            int col, row;
-            do {
-                col = random.nextInt(Board.BOARD_SIZE);
-                row = random.nextInt(Board.BOARD_SIZE);
-            } while (board.isOccupied(col, row));
-
-            board.placeWorker(aiId, i, col, row);
-            logMessage += "\n" + aiId + " platziert Arbeiter " + i + ": " + coordToNotation(col, row);
-        }
-
-        // Nächsten Spieler vorbereiten
-        currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
-        currentPlayerId = playerIds.get(currentPlayerIndex);
-
-        // Prüfen, ob alle platziert sind
-        boolean allPlaced = countPlacedWorkers() == playerIds.size() * workersToPlace;
-
-        if (allPlaced) {
-            placingWorkers = false;
-            moveEvaluation = "Alle Arbeiter platziert! Start P1.";
-            phase = GamePhase.MOVE_WORKER;
-            currentPlayerIndex = 0;
-            currentPlayerId = "P1";
-        } else if (agents.containsKey(currentPlayerId)) {
-            // Wenn auch der nächste Spieler eine KI ist, direkt platzieren
-            runAiPlacement();
-        } else {
             moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke 2 freie Felder.";
         }
     }
-
-
-//
-//    private void handlePlacementClick(int c, int r) {
-//        if (!board.isOccupied(c, r)) {
-//            board.placeWorker(currentPlayerId, placedWorkersCount + 1, c, r);
-//            logMessage += "\n" + currentPlayerId + " platziert Arbeiter " + (placedWorkersCount + 1) + ": " + coordToNotation(c, r);
-//            placedWorkersCount++;
-//
-//            if (placedWorkersCount == workersToPlace) {
-//                do {
-//                    currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
-//                    currentPlayerId = playerIds.get(currentPlayerIndex);
-//                    placedWorkersCount = 0;
-//
-//                    if (agents.containsKey(currentPlayerId)) {
-//                        runAiPlacement();
-//                    } else {
-//                        moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke 2 freie Felder.";
-//                        break;
-//                    }
-//                } while (true);
-//
-//                // Wenn alle durch sind (wir sind wieder bei P1), beginnt das Spiel
-//                if (currentPlayerId.equals("P1") && !placingWorkers) {
-//                    placingWorkers = false;
-//                    moveEvaluation = "Start P1. Wähle einen Arbeiter.";
-//                    phase = GamePhase.MOVE_WORKER;
-//                }
-//            }
-//
-//            else {
-//                moveEvaluation = "Platzierung " + currentPlayerId + ". Klicke noch " + (workersToPlace - placedWorkersCount) + " freie Felder.";
-//            }
-//        }
-//    }
-//
-//    private void runAiPlacement() {
-//        String aiId = currentPlayerId;
-//        for (int i = 1; i <= workersToPlace; i++) {
-//            Random random = new Random();
-//            int col, row;
-//            do {
-//                col = random.nextInt(Board.BOARD_SIZE);
-//                row = random.nextInt(Board.BOARD_SIZE);
-//            } while (board.isOccupied(col, row));
-//
-//            board.placeWorker(aiId, i, col, row);
-//            logMessage += "\n" + aiId + " platziert Arbeiter " + i + ": " + coordToNotation(col, row);
-//        }
-//
-//        // Zum nächsten Spieler wechseln
-//        currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
-//        currentPlayerId = playerIds.get(currentPlayerIndex);
-//
-//        if (currentPlayerId.equals("P1")) {
-//            placingWorkers = false;
-//            moveEvaluation = "Start P1. Wähle einen Arbeiter.";
-//            phase = GamePhase.MOVE_WORKER;
-//        } else {
-//            runAiPlacement();
-//        }
-//    }
 
     private void handleGameClick(int c, int r) {
         int[] clickedCoord = new int[]{c, r};
@@ -582,121 +548,77 @@ public class SantoriniGUI extends PApplet {
             String workerIdAt = board.getWorkerIdAt(c, r);
 
             if (workerIdAt != null && workerIdAt.equals(currentPlayerId)) {
-                // 1. Klick auf eigenen Arbeiter: Auswählen
                 selectedWorkerCoord = clickedCoord;
-                moveEvaluation = "Arbeiter gewählt. Klicke Bewegungsziel (blau).";
+                moveEvaluation = "Arbeiter gewählt. Klicke Bewegungsziel (grüner Rahmen).";
                 moveFromCoord = null;
                 moveToCoord = null;
 
             } else if (selectedWorkerCoord != null) {
-                // 2. Klick auf Bewegungsziel (Blau)
                 List<int[]> moveTargets = board.getValidMoveTargets(selectedWorkerCoord);
-
                 if (targetsContain(moveTargets, clickedCoord)) {
-
-                    // WINNING MOVE CHECK
                     if (board.checkWin(clickedCoord)) {
                         Move move = new Move(selectedWorkerCoord, clickedCoord);
                         executeMove(currentPlayerId, move);
                         return;
                     }
-
-                    // Normaler Zug: Bewegung speichern und zur Bau-Phase wechseln
-                    moveFromCoord = selectedWorkerCoord; // Ursprünglicher Standort
-                    moveToCoord = clickedCoord; // Zielstandort
-                    selectedWorkerCoord = null; // Auswahl zurücksetzen
-
+                    moveFromCoord = selectedWorkerCoord;
+                    moveToCoord = clickedCoord;
+                    selectedWorkerCoord = null;
                     phase = GamePhase.CHOOSE_BUILD_TARGET;
-                    moveEvaluation = "Bewegt nach " + coordToNotation(moveToCoord) + ". Klicke Bauziel (orange).";
+                    moveEvaluation = "Bewegt nach " + coordToNotation(moveToCoord) + ". Klicke Bauziel (gelber Rahmen).";
                 } else {
-                    moveEvaluation = "Ungültiger Zug. Wähle ein gültiges Bewegungsziel (blau).";
+                    moveEvaluation = "Ungültiger Zug. Wähle ein gültiges Bewegungsziel (grüner Rahmen).";
                 }
             } else {
                 moveEvaluation = "Bitte wähle zuerst einen deiner Arbeiter.";
             }
 
         } else if (phase == GamePhase.CHOOSE_BUILD_TARGET) {
-            // 3. Klick auf Bauziel (Orange)
-
             if (isBuildTargetValid(moveToCoord, moveFromCoord, clickedCoord)) {
-                // Zug ausführen (Bewegung war bereits in moveFromCoord -> moveToCoord gespeichert)
                 Move move = new Move(moveFromCoord, moveToCoord, clickedCoord);
                 executeMove(currentPlayerId, move);
-
-                // Zug beendet, KI ist dran (oder P1 bleibt dran)
                 moveFromCoord = null;
                 moveToCoord = null;
-                moveEvaluation = "Bauen beendet. Nächster Spieler (" + playerIds.get(currentPlayerIndex) + ") ist am Zug.";
-                phase = GamePhase.MOVE_WORKER;
-
-                // KI-Runde vorbereiten
-                if (agents.containsKey(currentPlayerId)) {
+                // executeMove setzt currentPlayerId auf nächsten Spieler
+                if (agents.containsKey(currentPlayerId) && !gameOver) {
                     aiThinking = true;
                     phase = GamePhase.WAIT_FOR_AI;
+                    moveEvaluation = "KI " + currentPlayerId + " denkt nach...";
+                } else if (!gameOver) {
+                    moveEvaluation = "Bauen beendet. Nächster Zug " + currentPlayerId + ". Wähle einen Arbeiter.";
+                    phase = GamePhase.MOVE_WORKER;
                 }
             } else {
-                moveEvaluation = "Ungültiges Bauziel. Wähle ein gültiges Feld (orange).";
+                moveEvaluation = "Ungültiges Bauziel. Wähle ein gültiges Feld (gelber Rahmen).";
             }
         }
     }
 
-    /**
-     * Korrigierte Validierung für den Bauzug des menschlichen Spielers.
-     * Stellt sicher, dass auf das gerade verlassene Feld gebaut werden kann.
-     * @param workerNewCoord (moveToCoord)
-     * @param workerOldCoord (moveFromCoord)
-     * @param buildCoord (clickedCoord)
-     * @return Gültigkeit
-     */
     private boolean isBuildTargetValid(int[] workerNewCoord, int[] workerOldCoord, int[] buildCoord) {
-        // 1. Muss ein Nachbar des neuen Standorts sein
+        if (workerNewCoord == null || buildCoord == null) return false;
         List<int[]> neighbors = board.getNeighbors(workerNewCoord);
-        if (!targetsContain(neighbors, buildCoord)) {
-            return false;
-        }
-
-        // 2. Darf keine Kuppel sein
-        if (board.isDomed(buildCoord[0], buildCoord[1])) {
-            return false;
-        }
-
-        // 3. Darf nicht durch einen ANDEREN Arbeiter besetzt sein
+        if (!targetsContain(neighbors, buildCoord)) return false;
+        if (board.isDomed(buildCoord[0], buildCoord[1])) return false;
         String workerAtBuild = board.getWorkerIdAt(buildCoord[0], buildCoord[1]);
-
         if (workerAtBuild != null) {
-            // Wenn das Baufeld besetzt ist, muss es unser Arbeiter sein, der sich gleich wegbewegt (workerOldCoord)
-            if (Arrays.equals(buildCoord, workerOldCoord)) {
-                // Bauen auf dem gerade verlassenen Feld ist ERLAUBT
-                return true;
-            } else {
-                // Besetzt durch einen anderen Arbeiter (Gegner oder anderer eigener Arbeiter) -> NICHT ERLAUBT
-                return false;
-            }
+            // erlaubt, wenn es das Feld ist, das gerade verlassen wurde
+            return Arrays.equals(buildCoord, workerOldCoord);
         }
-
         return true;
     }
 
     private void executeMove(String playerId, Move move) {
-        // 1. Board-Zustand vor dem Zug klonen
         Board before = board.clone();
-
-        // 2. Bewegung und Bauen ausführen
         board.moveWorker(playerId, move.getMoveFrom(), move.getMoveTo());
         board.buildStructure(move.getBuildAt());
-
-        // 3. Board-Zustand nach dem Zug klonen
         Board after = board.clone();
 
-        // 4. Bewertung generieren
         moveEvaluation = evaluateMove(before, after, move, playerId);
 
-        // 5. Notation fürs Logbuch
         String notation = formatMoveNotation(move);
         logMessage += "\n" + playerId + ": " + notation;
         logMessage += "\n" + moveEvaluation;
 
-        // 6. Gewinn prüfen
         if (board.checkWin(move.getMoveTo())) {
             gameOver = true;
             winnerId = playerId;
@@ -704,90 +626,58 @@ public class SantoriniGUI extends PApplet {
             return;
         }
 
-        // 7. Nächster Spieler
+        // Wechsle zum nächsten Spieler (behalte die Reihenfolge playerIds)
         currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
         currentPlayerId = playerIds.get(currentPlayerIndex);
 
-        // 8. Nächste Phase / KI-Runde
-        if (agents.containsKey(currentPlayerId) && !gameOver) {
-            aiThinking = true;
-            phase = GamePhase.WAIT_FOR_AI;
-        } else if (!gameOver) {
-            moveEvaluation = "Nächster Zug " + currentPlayerId + ". Wähle einen Arbeiter.";
-            phase = GamePhase.MOVE_WORKER;
-        }
+        // Standardphase
+        phase = GamePhase.MOVE_WORKER;
     }
 
     private String evaluateMove(Board before, Board after, Move move, String playerId) {
         int[] from = move.getMoveFrom();
         int[] to = move.getMoveTo();
         int[] build = move.getBuildAt();
-
         int levelBefore = before.getLevel(from[0], from[1]);
         int levelAfter = after.getLevel(to[0], to[1]);
-
         StringBuilder eval = new StringBuilder();
-
-        // --- Beschreibung des Zugs ---
-        eval.append(playerId).append(" zieht von ")
-                .append(coordToNotation(from)).append(" nach ").append(coordToNotation(to));
-
-        if (levelAfter > levelBefore) {
-            eval.append(" (steigt auf Level ").append(levelAfter).append(")");
-        }
-
+        eval.append(playerId).append(" zieht von ").append(coordToNotation(from)).append(" nach ").append(coordToNotation(to));
+        if (levelAfter > levelBefore) eval.append(" (steigt auf Level ").append(levelAfter).append(")");
         eval.append(" und baut auf ").append(coordToNotation(build)).append(". ");
-
-        // --- Heuristische Bewertung ---
         int score = 0;
-
-        // 1. Aufstieg
-        if (levelAfter > levelBefore) {
-            eval.append("Er steigt höher – das ist gut. ");
-            score += 2;
-        }
-
-        // 2. Bau auf hoher Ebene
+        if (levelAfter > levelBefore) { eval.append("Er steigt höher – das ist gut. "); score += 2; }
         int buildLevel = before.getLevel(build[0], build[1]);
-        if (buildLevel == 2) {
-            eval.append("Baut auf Level 2 – mögliche Verteidigung. ");
-            score += 1;
-        }
-
-        // 3. Nähe zur Mitte (Positionsbonus)
+        if (buildLevel == 2) { eval.append("Baut auf Level 2 – mögliche Verteidigung. "); score += 1; }
         int distCenter = Math.abs(to[0] - 2) + Math.abs(to[1] - 2);
-        if (distCenter <= 1) {
-            eval.append("Kontrolliert das Zentrum. ");
-            score += 1;
-        }
-
-        // 4. Gegner blockiert?
+        if (distCenter <= 1) { eval.append("Kontrolliert das Zentrum. "); score += 1; }
         boolean blocks = false;
         for (String pid : playerIds) {
             if (!pid.equals(playerId)) {
                 for (Worker w : before.getWorkersByPlayer(pid)) {
                     List<int[]> moves = before.getValidMoveTargets(w.getCoord());
-                    if (!moves.isEmpty() && moves.contains(to)) {
-                        blocks = true;
+                    if (moves != null) {
+                        for (int[] t : moves) {
+                            if (Arrays.equals(t, to)) { blocks = true; break; }
+                        }
                     }
+                    if (blocks) break;
                 }
             }
         }
-        if (blocks) {
-            eval.append("Blockiert Gegnerischen Weg. ");
-            score += 2;
-        }
-
-        // 5. Bewertungstext
+        if (blocks) { eval.append("Blockiert Gegnerischen Weg. "); score += 2; }
         if (score >= 4) eval.append("Sehr starker Zug.");
         else if (score >= 2) eval.append("Guter Zug.");
         else if (score >= 0) eval.append("Solider Zug.");
         else eval.append("Riskanter Zug.");
-
         return eval.toString();
     }
 
     private void runAiTurn() {
+        if (!agents.containsKey(currentPlayerId)) {
+            aiThinking = false;
+            return;
+        }
+
         ReflexAgent agent = agents.get(currentPlayerId);
 
         try {
@@ -808,18 +698,17 @@ public class SantoriniGUI extends PApplet {
         }
 
         moveEvaluation = evaluation.evaluation;
-
         aiThinking = false;
 
-        // Führe den Zug aus
         executeMove(currentPlayerId, move);
 
-        if (currentPlayerId.equals("P1") && !gameOver) {
-            moveEvaluation = "Dein Zug! Wähle einen Arbeiter.";
-            phase = GamePhase.MOVE_WORKER;
-        } else if (agents.containsKey(currentPlayerId) && !gameOver) {
+        // Wenn der nächste Spieler KI ist → KI weitermachen
+        if (agents.containsKey(currentPlayerId) && !gameOver) {
             aiThinking = true;
             phase = GamePhase.WAIT_FOR_AI;
+        } else if (!gameOver) {
+            moveEvaluation = "Dein Zug! Wähle einen Arbeiter.";
+            phase = GamePhase.MOVE_WORKER;
         }
     }
 
@@ -830,18 +719,15 @@ public class SantoriniGUI extends PApplet {
                 mouseY < BOARD_OFFSET || mouseY > BOARD_OFFSET + Board.BOARD_SIZE * CELL_SIZE) {
             return null;
         }
-
         int c = (mouseX - BOARD_OFFSET) / CELL_SIZE;
         int r = Board.BOARD_SIZE - 1 - (mouseY - BOARD_OFFSET) / CELL_SIZE;
-
         return new int[]{c, r};
     }
 
     private boolean targetsContain(List<int[]> targets, int[] coord) {
-        for (int[] target : targets) {
-            if (target[0] == coord[0] && target[1] == coord[1]) {
-                return true;
-            }
+        if (targets == null || coord == null) return false;
+        for (int[] t : targets) {
+            if (t[0] == coord[0] && t[1] == coord[1]) return true;
         }
         return false;
     }
@@ -854,24 +740,18 @@ public class SantoriniGUI extends PApplet {
 
     private String coordToNotation(int[] coord) {
         if (coord == null || !board.isValidCoord(coord[0], coord[1])) return "N/A";
-        char colChar = (char) ('a' + coord[0]);
-        char rowChar = (char) ('1' + coord[1]);
-        return String.valueOf(colChar) + rowChar;
+        return coordToNotation(coord[0], coord[1]);
     }
 
     private String formatMoveNotation(Move move) {
         String fromNot = coordToNotation(move.getMoveFrom()[0], move.getMoveFrom()[1]);
         String toNot = coordToNotation(move.getMoveTo()[0], move.getMoveTo()[1]);
-
-        if (move.getBuildAt() == null) {
-            return fromNot + "-" + toNot;
-        } else {
-            String buildNot = coordToNotation(move.getBuildAt()[0], move.getBuildAt()[1]);
-            return fromNot + "-" + toNot + "," + buildNot;
-        }
+        if (move.getBuildAt() == null) return fromNot + "-" + toNot;
+        String buildNot = coordToNotation(move.getBuildAt()[0], move.getBuildAt()[1]);
+        return fromNot + "-" + toNot + "," + buildNot;
     }
 
-    // --- Main Startpunkt ---
+    // --- Main ---
     public static void main(String[] passedArgs) {
         String[] appletArgs = new String[] { "SantoriniGUI" };
         PApplet.main(appletArgs);
