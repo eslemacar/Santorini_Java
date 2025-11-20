@@ -353,7 +353,7 @@ public class SantoriniGUI extends PApplet {
         fill(0);
         textSize(14);
         textAlign(LEFT, TOP);
-        text("Zugbewertung/Nachricht:", uiX + 5, 125);
+        text("Nachricht:", uiX + 5, 125);
         textSize(12);
         text(moveEvaluation, uiX + 5, 145, 190, 70);
 
@@ -364,7 +364,7 @@ public class SantoriniGUI extends PApplet {
         fill(0);
         textSize(14);
         textAlign(LEFT, TOP);
-        text("Spiel-Logbuch (Notation):", uiX + 5, 255);
+        text("Spiel-Logbuch (Notation/Zugbewertung):", uiX + 5, 255);
         textSize(12);
         text(logMessage, uiX + 5, 275, 190, 480);
     }
@@ -607,20 +607,40 @@ public class SantoriniGUI extends PApplet {
         return true;
     }
 
+    // Originale executeMove-Methode für menschliche Züge
     private void executeMove(String playerId, Move move) {
+        // Ruft die neue Methode auf, mit null für externalEvaluation (Standard-Bewertung wird verwendet)
+        executeMove(playerId, move, null);
+    }
+
+    // Neue überladene Methode, die die KI-Bewertung akzeptiert
+    private void executeMove(String playerId, Move move, String externalEvaluation) {
+        // 1. Board-Zustand vor dem Zug klonen
         Board before = board.clone();
+
+        // 2. Bewegung und Bauen ausführen
         board.moveWorker(playerId, move.getMoveFrom(), move.getMoveTo());
         if (move.getBuildAt() != null) {
             board.buildStructure(move.getBuildAt());
         }
+
+        // KORREKTUR 1: Board after muss hier geklont werden
         Board after = board.clone();
 
-        moveEvaluation = evaluateMove(before, after, move, playerId);
+        // 4. Bewertung generieren ODER externen String verwenden
+        if (externalEvaluation != null) {
+            moveEvaluation = externalEvaluation; // KI-Bewertung übernehmen
+        } else {
+            // Alte Logik für menschliche Züge verwenden
+            moveEvaluation = evaluateMove(before, after, move, playerId);
+        }
 
+        // 5. Notation fürs Logbuch
         String notation = formatMoveNotation(move);
         logMessage += "\n" + playerId + ": " + notation;
         logMessage += "\n" + moveEvaluation;
 
+        // 6. Gewinn prüfen
         if (board.checkWin(move.getMoveTo())) {
             gameOver = true;
             winnerId = playerId;
@@ -628,13 +648,15 @@ public class SantoriniGUI extends PApplet {
             return;
         }
 
-        // Wechsle zum nächsten Spieler (behalte die Reihenfolge playerIds)
+        // 7. Nächster Spieler
         currentPlayerIndex = (currentPlayerIndex + 1) % playerIds.size();
         currentPlayerId = playerIds.get(currentPlayerIndex);
 
-        // Standardphase
+        // 8. Standardphase
         phase = GamePhase.MOVE_WORKER;
     }
+
+
     private String evaluateMove(Board before, Board after, Move move, String playerId) {
         int[] from = move.getMoveFrom();
         int[] to = move.getMoveTo();
@@ -644,17 +666,21 @@ public class SantoriniGUI extends PApplet {
         StringBuilder eval = new StringBuilder();
         eval.append(playerId).append(" zieht von ").append(coordToNotation(from)).append(" nach ").append(coordToNotation(to));
         if (levelAfter > levelBefore) eval.append(" (steigt auf Level ").append(levelAfter).append(")");
-        eval.append(" und baut auf ").append(coordToNotation(build)).append(". ");
+
         int score = 0;
         if (levelAfter > levelBefore) { eval.append("Er steigt höher – das ist gut. "); score += 2; }
+
         if (build != null) {
+            // KORREKTUR: Entfernt die doppelte Ausgabe von "und baut auf"
             eval.append(" und baut auf ").append(coordToNotation(build)).append(". ");
+
             int buildLevel = before.getLevel(build[0], build[1]);
             if (buildLevel == 2) { eval.append("Baut auf Level 2 – mögliche Verteidigung. "); score += 1; }
         } else {
             // Dies ist ein reiner Bewegungszug (oder ein Gewinnzug)
             eval.append(". (Kein Bau-Schritt) ");
         }
+
         int distCenter = Math.abs(to[0] - 2) + Math.abs(to[1] - 2);
         if (distCenter <= 1) { eval.append("Kontrolliert das Zentrum. "); score += 1; }
         boolean blocks = false;
@@ -680,44 +706,6 @@ public class SantoriniGUI extends PApplet {
     }
 
 
-//    private String evaluateMove(Board before, Board after, Move move, String playerId) {
-//        int[] from = move.getMoveFrom();
-//        int[] to = move.getMoveTo();
-//        int[] build = move.getBuildAt();
-//        int levelBefore = before.getLevel(from[0], from[1]);
-//        int levelAfter = after.getLevel(to[0], to[1]);
-//        StringBuilder eval = new StringBuilder();
-//        eval.append(playerId).append(" zieht von ").append(coordToNotation(from)).append(" nach ").append(coordToNotation(to));
-//        if (levelAfter > levelBefore) eval.append(" (steigt auf Level ").append(levelAfter).append(")");
-//        eval.append(" und baut auf ").append(coordToNotation(build)).append(". ");
-//        int score = 0;
-//
-//        if (levelAfter > levelBefore) { eval.append("Er steigt höher – das ist gut. "); score += 2; }
-//        int buildLevel = before.getLevel(build[0], build[1]);
-//        if (buildLevel == 2) { eval.append("Baut auf Level 2 – mögliche Verteidigung. "); score += 1; }
-//        int distCenter = Math.abs(to[0] - 2) + Math.abs(to[1] - 2);
-//        if (distCenter <= 1) { eval.append("Kontrolliert das Zentrum. "); score += 1; }
-//        boolean blocks = false;
-//        for (String pid : playerIds) {
-//            if (!pid.equals(playerId)) {
-//                for (Worker w : before.getWorkersByPlayer(pid)) {
-//                    List<int[]> moves = before.getValidMoveTargets(w.getCoord());
-//                    if (moves != null) {
-//                        for (int[] t : moves) {
-//                            if (Arrays.equals(t, to)) { blocks = true; break; }
-//                        }
-//                    }
-//                    if (blocks) break;
-//                }
-//            }
-//        }
-//        if (blocks) { eval.append("Blockiert Gegnerischen Weg. "); score += 2; }
-//        if (score >= 4) eval.append("Sehr starker Zug.");
-//        else if (score >= 2) eval.append("Guter Zug.");
-//        else if (score >= 0) eval.append("Solider Zug.");
-//        else eval.append("Riskanter Zug.");
-//        return eval.toString();
-//    }
 
     private void runAiTurn() {
         if (!agents.containsKey(currentPlayerId)) {
@@ -744,10 +732,11 @@ public class SantoriniGUI extends PApplet {
             return;
         }
 
-        moveEvaluation = evaluation.evaluation;
-        aiThinking = false;
+        // Führt den Zug aus und verwendet die KI-Bewertung (executeMove mit 3 Argumenten)
+        executeMove(currentPlayerId, move, evaluation.evaluation);
 
-        executeMove(currentPlayerId, move);
+        // KI-spezifische Phase beenden
+        aiThinking = false;
 
         // Wenn der nächste Spieler KI ist → KI weitermachen
         if (agents.containsKey(currentPlayerId) && !gameOver) {

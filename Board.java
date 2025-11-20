@@ -171,7 +171,9 @@ public class Board {
     }
 
     // --- Hilfsfunktionen für den Agenten ---
-
+    public List<String> getPlayerIds() {
+        return playerIds;
+    }
     public List<Worker> getWorkersByPlayer(String playerId) {
         return workers.get(playerId);
     }
