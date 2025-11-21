@@ -8,30 +8,28 @@ public class Board {
     public static final int MAX_LEVEL = 4; // Level 4 ist Kuppel
     private static final int WIN_LEVEL = 3;
 
-    private final int[][] buildingLevels; // Bauhöhe [col][row] (0 bis 4)
-    private final Map<String, List<Worker>> workers; // Arbeiter nach Spieler-ID
+    private final int[][] buildingLevels;
+    private final Map<String, List<Worker>> workers;
     private final List<String> playerIds;
 
     public Board(List<String> playerIds) {
-        this.playerIds = playerIds;
+        this.playerIds = new ArrayList<>(playerIds);
         this.buildingLevels = new int[BOARD_SIZE][BOARD_SIZE];
         this.workers = new HashMap<>();
-        for (String id : playerIds) {
+        for (String id : this.playerIds) {
             workers.put(id, new ArrayList<>());
         }
     }
 
-    // --- Zustandsabfragen ---
+    // --- Zustand abfragen ---
 
-    /**
-     * Gibt die Arbeiter-ID an der Koordinate zurück, falls vorhanden.
-     */
     public String getWorkerIdAt(int col, int row) {
+        if (!isValidCoord(col, row)) return null;
+
         for (Map.Entry<String, List<Worker>> entry : workers.entrySet()) {
             for (Worker worker : entry.getValue()) {
-                if (worker.getCoord()[0] == col && worker.getCoord()[1] == row) {
-                    return entry.getKey();
-                }
+                int[] c = worker.getCoord();
+                if (c[0] == col && c[1] == row) return entry.getKey();
             }
         }
         return null;
@@ -48,10 +46,9 @@ public class Board {
 
     public void setLevel(int col, int row, int level) {
         if (isValidCoord(col, row)) {
-            buildingLevels[col][row] = Math.min(level, MAX_LEVEL);
+            buildingLevels[col][row] = Math.max(0, Math.min(level, MAX_LEVEL));
         }
     }
-
 
     public boolean isDomed(int col, int row) {
         return getLevel(col, row) == MAX_LEVEL;
@@ -61,163 +58,170 @@ public class Board {
         return col >= 0 && col < BOARD_SIZE && row >= 0 && row < BOARD_SIZE;
     }
 
-    // --- Zug-Logik ---
-
+    // --- Gewinnprüfung ---
     public boolean checkWin(int[] moveTo) {
+        if (moveTo == null) return false;
         return getLevel(moveTo[0], moveTo[1]) == WIN_LEVEL;
     }
 
-
+    // --- Klonen ---
     @Override
     public Board clone() {
         Board copy = new Board(this.playerIds);
+
         for (int c = 0; c < BOARD_SIZE; c++) {
             for (int r = 0; r < BOARD_SIZE; r++) {
-                copy.setLevel(c, r, this.getLevel(c, r));
+                copy.buildingLevels[c][r] = this.buildingLevels[c][r];
             }
         }
+
         for (String pid : playerIds) {
-            for (Worker w : this.getWorkersByPlayer(pid)) {
+            for (Worker w : workers.get(pid)) {
                 int[] coord = w.getCoord();
                 copy.placeWorker(pid, w.getWorkerId(), coord[0], coord[1]);
             }
         }
+
         return copy;
     }
 
-
-    /**
-     * Gibt eine Liste aller gültigen Nachbarfelder zurück.
-     */
+    // --- Nachbarn ---
     public List<int[]> getNeighbors(int[] coord) {
         List<int[]> neighbors = new ArrayList<>();
+        if (coord == null) return neighbors;
+
         int col = coord[0];
         int row = coord[1];
 
         for (int dc = -1; dc <= 1; dc++) {
             for (int dr = -1; dr <= 1; dr++) {
                 if (dc == 0 && dr == 0) continue;
-
-                int nCol = col + dc;
-                int nRow = row + dr;
-
-                if (isValidCoord(nCol, nRow)) {
-                    neighbors.add(new int[]{nCol, nRow});
-                }
+                int nc = col + dc;
+                int nr = row + dr;
+                if (isValidCoord(nc, nr)) neighbors.add(new int[]{nc, nr});
             }
         }
+
         return neighbors;
     }
 
-    /**
-     * Gibt die gültigen Felder zurück, auf die ein Arbeiter von 'workerCoord' ziehen kann.
-     */
+    // --- gültige Ziele ---
     public List<int[]> getValidMoveTargets(int[] workerCoord) {
-        int currentLevel = getLevel(workerCoord[0], workerCoord[1]);
         List<int[]> targets = new ArrayList<>();
+        if (workerCoord == null) return targets;
 
-        for (int[] target : getNeighbors(workerCoord)) {
-            int targetLevel = getLevel(target[0], target[1]);
+        int currentLevel = getLevel(workerCoord[0], workerCoord[1]);
 
-            if (isOccupied(target[0], target[1]) || isDomed(target[0], target[1])) {
-                continue;
-            }
+        for (int[] t : getNeighbors(workerCoord)) {
+            int c = t[0], r = t[1];
+            if (isOccupied(c, r)) continue;
+            if (isDomed(c, r)) continue;
 
-            // Maximal eine Ebene höher steigen
-            if (targetLevel <= currentLevel + 1) {
-                targets.add(target);
-            }
+            int level = getLevel(c, r);
+            if (level <= currentLevel + 1) targets.add(t);
         }
+
         return targets;
     }
 
-    /**
-     * Gibt die gültigen Felder zurück, auf denen nach dem Zug gebaut werden kann.
-     */
     public List<int[]> getValidBuildTargets(int[] workerCoord) {
         List<int[]> targets = new ArrayList<>();
+        if (workerCoord == null) return targets;
 
-        for (int[] target : getNeighbors(workerCoord)) {
-            if (isOccupied(target[0], target[1]) || isDomed(target[0], target[1])) {
-                continue;
-            }
-            targets.add(target);
+        for (int[] t : getNeighbors(workerCoord)) {
+            int c = t[0], r = t[1];
+            if (isDomed(c, r)) continue;
+            if (isOccupied(c, r)) continue;
+            targets.add(t);
         }
+
         return targets;
     }
 
-    // --- Zustandsänderungen ---
+    // --- Änderungen am Board ---
 
-    public void placeWorker(String playerId, int workerId, int col, int row) {
-        Worker newWorker = new Worker(playerId, workerId, col, row);
-        workers.get(playerId).add(newWorker);
+    public boolean placeWorker(String playerId, int workerId, int col, int row) {
+        if (!playerIds.contains(playerId)) return false;
+        if (!isValidCoord(col, row)) return false;
+        if (isOccupied(col, row)) return false;
+
+        workers.get(playerId).add(new Worker(playerId, workerId, col, row));
+        return true;
     }
 
-    public void moveWorker(String playerId, int[] moveFrom, int[] moveTo) {
-        Worker worker = getWorker(playerId, moveFrom);
-        if (worker != null) {
-            worker.setCoord(moveTo[0], moveTo[1]);
-        }
+    public boolean moveWorker(String playerId, int[] from, int[] to) {
+        if (!playerIds.contains(playerId)) return false;
+        if (from == null || to == null) return false;
+        if (!isValidCoord(to[0], to[1])) return false;
+        if (isOccupied(to[0], to[1])) return false;
+
+        Worker w = getWorker(playerId, from);
+        if (w == null) return false;
+
+        w.setCoord(to[0], to[1]);
+        return true;
     }
 
-    public void buildStructure(int[] buildAt) {
-        if (buildAt == null) return;
-        int col = buildAt[0];
-        int row = buildAt[1];
+    public boolean buildStructure(int[] buildAt) {
+        if (buildAt == null) return false;
+        int c = buildAt[0];
+        int r = buildAt[1];
+        if (!isValidCoord(c, r)) return false;
 
-        if (isValidCoord(col, row) && buildingLevels[col][row] < MAX_LEVEL) {
-            buildingLevels[col][row]++;
-        }
+        if (buildingLevels[c][r] >= MAX_LEVEL) return false;
+        buildingLevels[c][r]++;
+
+        return true;
     }
 
-    // --- Hilfsfunktionen für den Agenten ---
-    public List<String> getPlayerIds() {
-        return playerIds;
-    }
-    public List<Worker> getWorkersByPlayer(String playerId) {
-        return workers.get(playerId);
-    }
+    // --- Arbeiter Hilfen ---
 
     public Worker getWorker(String playerId, int[] coord) {
-        for (Worker worker : workers.get(playerId)) {
-            if (worker.getCoord()[0] == coord[0] && worker.getCoord()[1] == coord[1]) {
-                return worker;
-            }
+        if (!playerIds.contains(playerId)) return null;
+        for (Worker w : workers.get(playerId)) {
+            int[] c = w.getCoord();
+            if (c[0] == coord[0] && c[1] == coord[1]) return w;
         }
         return null;
     }
 
+    public List<Worker> getWorkersByPlayer(String pid) {
+        return new ArrayList<>(workers.get(pid));
+    }
+
+    public List<String> getPlayerIds() {
+        return new ArrayList<>(playerIds);
+    }
 
     // --- Anzeige ---
-
     public void display(String currentPlayerId) {
         System.out.println("-------------------------------------");
         System.out.println("Am Zug: " + currentPlayerId);
         System.out.println("    a   b   c   d   e");
 
-        // Iteration von oben nach unten (Zeile 5 bis 1)
-        for (int r = BOARD_SIZE - 1; r >= 0; r--) {
-            StringBuilder rowStr = new StringBuilder((r + 1) + " |");
-            for (int c = 0; c < BOARD_SIZE; c++) {
-                String workerId = getWorkerIdAt(c, r);
-                int level = getLevel(c, r);
-                String cell;
+        for (int r = 4; r >= 0; r--) {
+            StringBuilder row = new StringBuilder((r + 1) + " |");
 
-                if (workerId != null) {
-                    // Arbeiter: z.B. P1 auf Level 2 -> '12'
-                    cell = " " + workerId.charAt(1) + level + " ";
-                } else if (level == MAX_LEVEL) {
-                    // Kuppel
+            for (int c = 0; c < 5; c++) {
+                String owner = getWorkerIdAt(c, r);
+                int lvl = getLevel(c, r);
+
+                String cell;
+                if (owner != null) {
+                    // P1 → 1, P2 → 2
+                    cell = " " + owner.charAt(1) + lvl + " ";
+                } else if (lvl == 4) {
                     cell = " D ";
                 } else {
-                    // Nur Gebäude oder leer
-                    cell = " " + level + " ";
+                    cell = " " + lvl + " ";
                 }
-                rowStr.append(cell).append(" ");
+
+                row.append(cell);
+                row.append(" ");
             }
-            System.out.println(rowStr.toString());
+            System.out.println(row);
         }
+
         System.out.println("-------------------------------------");
-        System.out.println("Legende: 'NL' = Arbeiter PN auf Level L, 'D' = Kuppel");
     }
 }

@@ -124,6 +124,10 @@ public class SantoriniGame {
         }
     }
 
+// IN SantoriniGame.java
+
+// ... (Rest der Klasse bleibt unverändert bis handleAiTurn)
+
     private void handleAiTurn(String playerId) {
         System.out.println("\n--- " + playerId + " (KI) ist am Zug ---");
         ReflexAgent agent = agents.get(playerId);
@@ -136,13 +140,14 @@ public class SantoriniGame {
             Thread.currentThread().interrupt();
         }
 
+        // Agent wählt den Zug und liefert die Bewertung
         ReflexAgent.MoveEvaluation evaluation = agent.chooseMove(board);
         long endTime = System.nanoTime();
         double elapsedSeconds = (endTime - startTime) / 1_000_000_000.0;
 
+        // 1. ZUG-ZEIT-REGEL PRÜFEN (bleibt gleich)
         System.out.println("KI-Bedenkzeit: " + String.format("%.2f", elapsedSeconds) + "s");
 
-        // Zug-Zeit-Regel prüfen
         if (elapsedSeconds > 10.0) {
             double penalty = elapsedSeconds - 10.0;
             timeBank.put(playerId, timeBank.get(playerId) - penalty);
@@ -164,14 +169,16 @@ public class SantoriniGame {
             return;
         }
 
-        // Zug ausführen und Ergebnis anzeigen
+        // 2. Zug ausführen
         executeMove(playerId, move);
 
-        // Zugbewertung (Anforderung 2b)
+        // 3. Zugbewertung (Anforderung 2b) - NEUE LOGIK FÜR DETAILLIERTE AUSGABE
         System.out.println("\n--- ZUGBEWERTUNG (KI-Sicht) ---");
-        System.out.println(evaluation.evaluation);
+        System.out.println(evaluation.evaluation); // Gibt den detaillierten Utility-String aus
         System.out.println("-------------------------------\n");
     }
+
+// ... (Rest der Klasse bleibt unverändert)
 
     private void handleHumanTurn(String playerId) {
         boolean validMove = false;

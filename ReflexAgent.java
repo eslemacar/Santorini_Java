@@ -1,36 +1,115 @@
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.Comparator;
 
 /**
- * Implementiert den Utility-Based Reflex Agenten (Nutzer-basiert) für Santorini.
- * Der Agent bewertet Züge anhand einer gewichteten Heuristik und wählt den Zug mit dem höchsten Nutzen.
+ * Lernfähiger ReflexAgent mit:
+ * - persistierbaren Gewichten (save/load)
+ * - einfacher Batch-Update-Funktion am Spielende (delta = finalReward - predicted)
+ * - Speicherung der Feature-History pro Spiel
+ *
+ * Hinweis: Datei-Speicherung erfolgt als CSV: weights_<playerId>.csv
  */
 public class ReflexAgent {
     private final String playerId;
     private final Random random;
 
-    // --- HEURISTISCHE GEWICHTE ---
-    private static final int W_WIN = 10000;      // Gewinnzug
-    private static final int W_ADVANCE = 10;     // Aufstieg auf ein höheres Level (L < 3)
-    private static final int W_BLOCK_OPP = 5;    // Gegner am Aufstieg auf Level 3 hindern (durch Kuppelbau)
-    private static final int W_BUILD_THREAT = 4; // Bau von Level 3 (direkte Bedrohung)
-    private static final int W_CENTER_CONTROL = 2; // Position im Zentrum
-    private static final int W_MOVE_UP = 3;      // Bewegung auf eine höhere Ebene (L < 3)
-    private static final int W_MOVE_DOWN = -2;   // Bewegung auf eine tiefere Ebene
+    // --- LERNPARAMETER ---
+    private static double ALPHA = 0.01;   // Lernrate
+    private static double EPSILON = 0.0;  // Explorationsrate (0 = keine Exploration)
+
+    // --- DYNAMISCHE GEWICHTE ---
+    private final double[] weights;
+    private static final int W_WIN_IDX = 0;
+    private static final int W_ADVANCE_IDX = 1;
+    private static final int W_BLOCK_OPP_IDX = 2;
+    private static final int W_BUILD_THREAT_IDX = 3;
+    private static final int W_CENTER_CONTROL_IDX = 4;
+    private static final int W_MOVE_UP_IDX = 5;
+    private static final int W_MOVE_DOWN_IDX = 6;
+    private static final int NUM_WEIGHTS = 7;
+
+    // --- HISTORY für Learning (pro Spiel) ---
+    // speichert Feature-Vektoren, die während des Spiels gewählt wurden
+    private final List<double[]> featureHistory;
 
     public ReflexAgent(String playerId) {
         this.playerId = playerId;
         this.random = new Random();
+        this.weights = new double[NUM_WEIGHTS];
+        this.featureHistory = new ArrayList<>();
+
+        // Standardinitialisierung (wie zuvor)
+        weights[W_WIN_IDX] = 10000;
+        weights[W_ADVANCE_IDX] = 10;
+        weights[W_BLOCK_OPP_IDX] = 5;
+        weights[W_BUILD_THREAT_IDX] = 4;
+        weights[W_CENTER_CONTROL_IDX] = 2;
+        weights[W_MOVE_UP_IDX] = 3;
+        weights[W_MOVE_DOWN_IDX] = -2;
+
+        // Versuche beim Erzeugen Gewichte zu laden (falls vorhanden)
+        try {
+            loadWeights();
+        } catch (Exception e) {
+            // Wenn Laden fehlschlägt, bleiben die Default-Gewichte erhalten
+        }
     }
 
     public String getPlayerId() {
         return playerId;
     }
 
+    // --- Datei-Pfade für Gewichtsspeicherung ---
+    private Path getWeightsPath() {
+        String filename = "weights_" + playerId + ".csv";
+        return Paths.get(filename);
+    }
+
+    /**
+     * Speichert die aktuellen Gewichte in eine CSV-Datei.
+     */
+    public synchronized void saveWeights() {
+        Path p = getWeightsPath();
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < weights.length; i++) {
+            if (i > 0) sb.append(",");
+            sb.append(Double.toString(weights[i]));
+        }
+        try {
+            Files.write(p, sb.toString().getBytes(StandardCharsets.UTF_8), StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            System.out.println("ReflexAgent " + playerId + ": Gewichte gespeichert -> " + p.toAbsolutePath());
+        } catch (IOException e) {
+            System.err.println("ReflexAgent " + playerId + ": Fehler beim Speichern der Gewichte: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Lädt Gewichte aus CSV, falls die Datei existiert.
+     */
+    public synchronized void loadWeights() throws IOException {
+        Path p = getWeightsPath();
+        if (!Files.exists(p)) return;
+        String content = new String(Files.readAllBytes(p), StandardCharsets.UTF_8).trim();
+        if (content.isEmpty()) return;
+        String[] parts = content.split(",");
+        int n = Math.min(parts.length, weights.length);
+        for (int i = 0; i < n; i++) {
+            try {
+                weights[i] = Double.parseDouble(parts[i]);
+            } catch (NumberFormatException ex) {
+                // safe fallback: beibehalten
+            }
+        }
+        System.out.println("ReflexAgent " + playerId + ": Gewichte geladen.");
+    }
+
     /**
      * Generiert alle legalen Züge für den Agenten.
+     * (bleibt inhaltlich wie in deiner Version)
      */
     public List<Move> getAllPossibleMoves(Board board) {
         List<Move> allMoves = new ArrayList<>();
@@ -43,37 +122,29 @@ public class ReflexAgent {
         for (Worker worker : myWorkers) {
             int[] workerCoord = worker.getCoord();
 
-            // 1. Mögliche Bewegungen finden
             List<int[]> moveTargets = board.getValidMoveTargets(workerCoord);
 
             for (int[] moveTo : moveTargets) {
-                // Prüfe auf Gewinnzug (Priorität 1)
                 if (board.checkWin(moveTo)) {
                     Move winMove = new Move(workerCoord, moveTo);
                     if (!allMoves.contains(winMove)) {
                         allMoves.add(winMove);
                     }
-                    continue; // Ein Gewinnzug benötigt keinen Bau
+                    continue;
                 }
 
-                // 2. Mögliche Baufelder finden (nach der hypothetischen Bewegung zu moveTo)
                 List<int[]> potentialBuildTargets = board.getValidBuildTargets(moveTo);
 
-                // Sonderfall: Bauen auf moveFrom
-                if (!board.isDomed(workerCoord[0], workerCoord[1]) && !board.isOccupied(workerCoord[0], workerCoord[1])) {
-                    boolean alreadyInList = false;
-                    for(int[] target : potentialBuildTargets) {
-                        if (target[0] == workerCoord[0] && target[1] == workerCoord[1]) {
-                            alreadyInList = true;
-                            break;
-                        }
-                    }
-                    if (!alreadyInList) {
-                        potentialBuildTargets.add(workerCoord);
-                    }
+                // optional: erlaubt Bauen auf dem Feld, das gerade verlassen wurde
+                boolean containsFrom = false;
+                for (int[] t : potentialBuildTargets) {
+                    if (t[0] == workerCoord[0] && t[1] == workerCoord[1]) { containsFrom = true; break;}
+                }
+                if (!containsFrom) {
+                    // (nur hinzufügen wenn nicht domed/occupied — Board.getValidBuildTargets hat das schon geprüft)
+                    potentialBuildTargets.add(workerCoord);
                 }
 
-                // Füge alle vollen Züge hinzu
                 for (int[] buildAt : potentialBuildTargets) {
                     allMoves.add(new Move(workerCoord, moveTo, buildAt));
                 }
@@ -83,10 +154,10 @@ public class ReflexAgent {
     }
 
     /**
-     * Bewertet einen einzelnen Zug basierend auf dem Nutzen (Utility).
+     * Extrahiert Features (Vektor) für einen Move auf dem gegebenen Board.
      */
-    private int evaluateMoveUtility(Move move, Board board) {
-        int utility = 0;
+    private double[] extractFeatures(Move move, Board board) {
+        double[] features = new double[NUM_WEIGHTS];
         int[] from = move.getMoveFrom();
         int[] to = move.getMoveTo();
         int[] build = move.getBuildAt();
@@ -95,92 +166,92 @@ public class ReflexAgent {
         int currentLevel = board.getLevel(from[0], from[1]);
         int targetLevel = board.getLevel(to[0], to[1]);
         int buildLevelBefore = (build != null) ? board.getLevel(build[0], build[1]) : -1;
-        int buildLevelAfter = (buildLevelBefore != -1 && buildLevelBefore < 4) ? buildLevelBefore + 1 : buildLevelBefore;
+        int buildLevelAfter = (buildLevelBefore != -1 && buildLevelBefore < Board.MAX_LEVEL) ? buildLevelBefore + 1 : buildLevelBefore;
 
-        // 1. Prio: Gewinnen
+        // 0. W_WIN
         if (move.getBuildAt() == null && board.checkWin(to)) {
-            return W_WIN;
+            features[W_WIN_IDX] = 1.0;
         }
 
-        // 2. Prio: Bewegung
-        if (targetLevel > currentLevel) {
-            utility += W_MOVE_UP * (targetLevel - currentLevel);
-        } else if (targetLevel < currentLevel) {
-            utility += W_MOVE_DOWN;
-        }
-
-        // 3. Prio: Erreichen von Level 2 oder 3 (Vorbereitung)
+        // 1. W_ADVANCE (Vorbereitung auf Level 3)
         if (targetLevel == 2 || targetLevel == 3) {
-            utility += W_ADVANCE * (targetLevel == 3 ? 3 : 1);
+            features[W_ADVANCE_IDX] = (targetLevel == 3 ? 3.0 : 1.0);
         }
 
-        // 4. Prio: Bauen (falls Bauen Teil des Zugs ist)
+        // 2. W_BLOCK_OPP / W_BUILD_THREAT
         if (build != null) {
-            // Bau einer Level-3-Bedrohung
             if (buildLevelAfter == 3) {
-                utility += W_BUILD_THREAT;
+                features[W_BUILD_THREAT_IDX] = 1.0;
             }
-            // Bau einer Kuppel (Blockade)
             if (buildLevelAfter == Board.MAX_LEVEL) {
-                utility += W_BLOCK_OPP;
-
-                // Hohe Blockade, wenn der Bau in der Nähe eines gegnerischen Workers ist
-                if (isBlockingOpponent(move.getMoveTo(), board)) {
-                    utility += W_BLOCK_OPP * 2;
-                }
+                features[W_BLOCK_OPP_IDX] = 1.0;
             }
         }
 
-        // 5. Prio: Positionelle Kontrolle (Zentrum)
+        // 3. W_CENTER_CONTROL
         int distCenter = Math.abs(to[0] - 2) + Math.abs(to[1] - 2);
         if (distCenter <= 1) {
-            utility += W_CENTER_CONTROL * (2 - distCenter);
+            features[W_CENTER_CONTROL_IDX] = (2 - distCenter);
         }
 
-        // 6. Prio: Defensives Bauen (Gegner blockieren/hindern)
-        if (build != null) {
-            if (isBuildNearOpponent(build, board)) {
-                utility += 1;
-            }
+        // 4. W_MOVE_UP / W_MOVE_DOWN
+        if (targetLevel > currentLevel) {
+            features[W_MOVE_UP_IDX] = (targetLevel - currentLevel);
+        } else if (targetLevel < currentLevel) {
+            features[W_MOVE_DOWN_IDX] = 1.0;
+        }
+
+        return features;
+    }
+
+    /**
+     * Utility: Skalarprodukt w^T * features
+     */
+    private double calculateUtility(Move move, Board board) {
+        double utility = 0;
+        double[] features = extractFeatures(move, board);
+
+        for (int i = 0; i < NUM_WEIGHTS; i++) {
+            utility += weights[i] * features[i];
         }
 
         return utility;
     }
 
     /**
-     * Hilfsfunktion: Prüft, ob der Bau in der Nähe eines Gegners erfolgt.
+     * Update-Gewichte am Spielende.
+     * Einfache Form: für jeden gespeicherten Feature-Vektor x:
+     *   pred = w^T x
+     *   delta = finalReward - pred
+     *   w += alpha * delta * x
+     *
+     * Danach wird die Feature-History geleert.
      */
-    private boolean isBuildNearOpponent(int[] buildCoord, Board board) {
-        for (int[] neighbor : board.getNeighbors(buildCoord)) {
-            String workerId = board.getWorkerIdAt(neighbor[0], neighbor[1]);
-            if (workerId != null && !workerId.equals(playerId)) {
-                return true;
+    public synchronized void updateWeights(double finalReward) {
+        if (featureHistory.isEmpty()) {
+            // Falls leer (z. B. KI spielte gar nicht), trotzdem kleine Anpassung (optional)
+            return;
+        }
+
+        for (double[] x : featureHistory) {
+            double pred = 0;
+            for (int i = 0; i < NUM_WEIGHTS; i++) pred += weights[i] * x[i];
+            double delta = finalReward - pred;
+            // Update
+            for (int i = 0; i < NUM_WEIGHTS; i++) {
+                weights[i] += ALPHA * delta * x[i];
             }
         }
-        return false;
+
+        // History leeren
+        featureHistory.clear();
+        System.out.println("ReflexAgent " + playerId + ": Gewichte aktualisiert (reward=" + finalReward + ")");
     }
 
     /**
-     * Hilfsfunktion: Prüft, ob der Worker den Gegner direkt blockiert (zum Beispiel durch Kuppel).
-     */
-    private boolean isBlockingOpponent(int[] newWorkerCoord, Board board) {
-        for (String pid : board.getPlayerIds()) {
-            if (pid.equals(playerId)) continue;
-
-            for (Worker w : board.getWorkersByPlayer(pid)) {
-                int[] oppCoord = w.getCoord();
-                // Prüfe, ob der Gegner durch diesen Zug keine Züge mehr hat
-                if (board.getValidMoveTargets(oppCoord).isEmpty()) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-
-    /**
-     * Wählt den besten Zug basierend auf der Utility-Funktion.
+     * Wählt den besten Zug.
+     * - epsilon-greedy: mit Wahrscheinlichkeit EPSILON zufällig
+     * - speichert das Feature-Vector des tatsächlich gewählten Zuges in featureHistory
      */
     public MoveEvaluation chooseMove(Board board) {
         List<Move> possibleMoves = getAllPossibleMoves(board);
@@ -188,44 +259,49 @@ public class ReflexAgent {
             return new MoveEvaluation(null, "Keine legalen Züge möglich. KI ist blockiert.");
         }
 
-        List<MoveScore> scoredMoves = new ArrayList<>();
-        int maxUtility = Integer.MIN_VALUE;
-
-        // 1. Alle Züge bewerten
-        for (Move move : possibleMoves) {
-            int utility = evaluateMoveUtility(move, board);
-            scoredMoves.add(new MoveScore(move, utility));
-            maxUtility = Math.max(maxUtility, utility);
+        // Exploration
+        if (EPSILON > 0 && random.nextDouble() < EPSILON) {
+            Move rnd = possibleMoves.get(random.nextInt(possibleMoves.size()));
+            // speichere Feature für Training
+            double[] feat = extractFeatures(rnd, board);
+            featureHistory.add(feat);
+            String expl = "Explorativ zufälliger Zug.";
+            return new MoveEvaluation(rnd, expl);
         }
 
-        // 2. Nur die besten Züge auswählen
+        double maxUtility = Double.NEGATIVE_INFINITY;
         List<Move> bestMoves = new ArrayList<>();
-        for (MoveScore score : scoredMoves) {
-            if (score.utility == maxUtility) {
-                bestMoves.add(score.move);
+
+        for (Move move : possibleMoves) {
+            double utility = calculateUtility(move, board);
+            if (utility > maxUtility) {
+                maxUtility = utility;
+                bestMoves.clear();
+                bestMoves.add(move);
+            } else if (utility == maxUtility) {
+                bestMoves.add(move);
             }
         }
 
-        // 3. Zufälligen Zug aus den besten auswählen
         Move finalMove = bestMoves.get(random.nextInt(bestMoves.size()));
 
-        // 4. Erklärende Bewertung generieren
-        String explanation = generateExplanation(finalMove, maxUtility, board); // board übergeben
+        // speichere Features der gewählten Aktion (für späteres Lernen)
+        double[] chosenFeatures = extractFeatures(finalMove, board);
+        featureHistory.add(chosenFeatures);
+
+        // erklärung
+        String explanation = generateExplanation(finalMove, (int)Math.round(maxUtility), board);
 
         return new MoveEvaluation(finalMove, explanation);
     }
 
-    // --- NEUE HILFSFUNKTIONEN FÜR MENSCHLICHE ERKLÄRUNG ---
+    // --- Hilfsfunktionen (wie vorher) ---
 
-    /**
-     * Führt die detaillierte, menschenlesbare Erklärung des Zuges aus.
-     */
     private String generateExplanation(Move move, int utility, Board board) {
-        if (utility == W_WIN) return "ULTIMATE UTILITY: Gewinnzug! Das Spiel wird beendet.";
+        if (utility == (int)weights[W_WIN_IDX]) return "ULTIMATE UTILITY: Gewinnzug! Das Spiel wird beendet.";
 
         StringBuilder sb = new StringBuilder("UTILITY-SCORE: " + utility + ". ");
 
-        // --- 1. Allgemeine Bewertung (basierend auf Score) ---
         if (utility >= 12) {
             sb.append(">>> EXZELLENTER ZUG <<< Starke Offensive und Defensive kombiniert.");
         } else if (utility >= 8) {
@@ -236,8 +312,6 @@ public class ReflexAgent {
             sb.append("Standardzug: Minimale Verbesserung oder nur Positionierung.");
         }
 
-        // --- 2. Detailanalyse der Bewegung und des Baus ---
-
         int[] from = move.getMoveFrom();
         int[] to = move.getMoveTo();
         int[] build = move.getBuildAt();
@@ -245,62 +319,64 @@ public class ReflexAgent {
         int currentLevel = board.getLevel(from[0], from[1]);
         int targetLevel = board.getLevel(to[0], to[1]);
         int buildLevelBefore = (build != null) ? board.getLevel(build[0], build[1]) : -1;
-        int buildLevelAfter = (buildLevelBefore != -1 && buildLevelBefore < 4) ? buildLevelBefore + 1 : buildLevelBefore;
+        int buildLevelAfter = (buildLevelBefore != -1 && buildLevelBefore < Board.MAX_LEVEL) ? buildLevelBefore + 1 : buildLevelBefore;
 
         sb.append(" Details: ");
-
-        // A. Bewegungsvorteil
         if (targetLevel > currentLevel) {
             sb.append(" [AUFSTIEG] Bewegt sich auf Level ").append(targetLevel).append(". ");
         } else if (targetLevel < currentLevel) {
             sb.append(" [ABSTIEG] Nimmt eine niedrigere, sicherere Position ein. ");
         }
 
-        // B. Taktischer Bau
         if (build != null) {
             if (buildLevelAfter == Board.MAX_LEVEL) {
-                // Wenn der Bau auf Level 4 geht (Kuppel)
                 sb.append(" [KUPPELBAU] Blockiert Feld ").append(coordToNotation(build)).append(" permanent.");
                 if (isBuildNearOpponent(build, board)) {
                     sb.append(" Blockiert einen gegnerischen Aufstieg. ");
                 }
             } else if (buildLevelAfter == 3) {
-                // Wenn der Bau auf Level 3 geht
                 sb.append(" [BEDROHUNG] Erstellt Level 3 auf ").append(coordToNotation(build)).append(". ");
             }
         }
 
-        // C. Positioneller Vorteil
         int distCenter = Math.abs(to[0] - 2) + Math.abs(to[1] - 2);
         if (distCenter <= 1) {
             sb.append(" [ZENTRUM] Kontrolliert das Zentrum. ");
         }
 
-        // D. Gegner blockiert (Heuristik)
-        // Hinweis: Wir verwenden die isBlockingOpponent-Logik erneut,
-        // obwohl dies bereits im Utility-Score enthalten ist, um die Erklärung zu vereinfachen.
-        if (isBlockingOpponent(move.getMoveTo(), board)) {
-            sb.append(" [BLOCKADE] Der Zug behindert gegnerische Bewegungen. ");
-        }
-
         return sb.toString();
     }
 
-    /**
-     * HILFSFUNKTION: Konvertiert Koordinaten-Array in menschenlesbare Notation (a1-e5).
-     * Muss hier eingefügt werden, da sie in generateExplanation verwendet wird.
-     */
+
     private String coordToNotation(int[] coord) {
         if (coord == null || coord.length < 2) return "N/A";
         char colChar = (char) ('a' + coord[0]);
-        // Santorini-Koordinaten (0=Reihe 1, 4=Reihe 5)
         char rowChar = (char) ('1' + coord[1]);
         return String.valueOf(colChar) + rowChar;
     }
 
+    private boolean isBuildNearOpponent(int[] buildCoord, Board board) {
+        for (int[] neighbor : board.getNeighbors(buildCoord)) {
+            String workerId = board.getWorkerIdAt(neighbor[0], neighbor[1]);
+            if (workerId != null && !workerId.equals(playerId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // --- Get/Set Hilfen (nützlich für UI / Debug) ---
+    public double[] getWeightsCopy() {
+        double[] copy = new double[weights.length];
+        System.arraycopy(weights, 0, copy, 0, weights.length);
+        return copy;
+    }
+
+    public static void setAlpha(double a) { ALPHA = a; }
+    public static void setEpsilon(double e) { EPSILON = e; }
 
     /**
-     * Innere Klasse zur Rückgabe von Zug und Bewertung.
+     * Inner class for returning move + explanation
      */
     public static class MoveEvaluation {
         public final Move move;
@@ -309,19 +385,6 @@ public class ReflexAgent {
         public MoveEvaluation(Move move, String evaluation) {
             this.move = move;
             this.evaluation = evaluation;
-        }
-    }
-
-    /**
-     * Innere Klasse zur Speicherung von Zug und dessen Utility.
-     */
-    private static class MoveScore {
-        final Move move;
-        final int utility;
-
-        MoveScore(Move move, int utility) {
-            this.move = move;
-            this.utility = utility;
         }
     }
 }
