@@ -18,8 +18,8 @@ public class ReflexAgent {
     private final Random random;
 
     // --- LERNPARAMETER ---
-    private static double ALPHA = 0.01;   // Lernrate
-    private static double EPSILON = 0.0;  // Explorationsrate (0 = keine Exploration)
+    private static double ALPHA = 0.005;   // Lernrate
+    private static double EPSILON = 0.15;  // Explorationsrate (0 = keine Exploration)
 
     // --- DYNAMISCHE GEWICHTE ---
     private final double[] weights;
@@ -43,13 +43,13 @@ public class ReflexAgent {
         this.featureHistory = new ArrayList<>();
 
         // Standardinitialisierung (wie zuvor)
-        weights[W_WIN_IDX] = 10000;
-        weights[W_ADVANCE_IDX] = 10;
-        weights[W_BLOCK_OPP_IDX] = 5;
-        weights[W_BUILD_THREAT_IDX] = 4;
-        weights[W_CENTER_CONTROL_IDX] = 2;
-        weights[W_MOVE_UP_IDX] = 3;
-        weights[W_MOVE_DOWN_IDX] = -2;
+        weights[W_WIN_IDX] = 50000;
+        weights[W_ADVANCE_IDX] = 30;
+        weights[W_BLOCK_OPP_IDX] = 8;
+        weights[W_BUILD_THREAT_IDX] = 8;
+        weights[W_CENTER_CONTROL_IDX] =6;
+        weights[W_MOVE_UP_IDX] = 50;
+        weights[W_MOVE_DOWN_IDX] = -10;
 
         // Versuche beim Erzeugen Gewichte zu laden (falls vorhanden)
         try {
@@ -351,6 +351,7 @@ public class ReflexAgent {
     private String coordToNotation(int[] coord) {
         if (coord == null || coord.length < 2) return "N/A";
         char colChar = (char) ('a' + coord[0]);
+        // Row 0 (unten) -> '1', Row 4 (oben) -> '5'
         char rowChar = (char) ('1' + coord[1]);
         return String.valueOf(colChar) + rowChar;
     }

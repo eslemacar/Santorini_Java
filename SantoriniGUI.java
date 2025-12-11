@@ -1547,7 +1547,6 @@ public class SantoriniGUI extends PApplet {
     }
 
 
-
     private void runAiTurn() {
         if (!agents.containsKey(currentPlayerId)) {
             aiThinking = false;
@@ -1574,11 +1573,18 @@ public class SantoriniGUI extends PApplet {
             moveEvaluation = currentPlayerId + " ist blockiert und verliert.";
             finalizeLearning(winnerId); // <--- LERNFINALISIERUNG auch bei Blockade
             aiThinking = false;
+            // KONSOLENAUSGABE HINZUFÜGEN:
+            System.out.println("\n[KI-Zug] " + moveEvaluation); // Ausgabe der Blockade
             return;
         }
 
         // Führt den Zug aus und verwendet die KI-Bewertung (executeMove mit 3 Argumenten)
         executeMove(currentPlayerId, move, evaluation.evaluation);
+
+        // NEUE KONSOLENAUSGABE HINZUFÜGEN
+        System.out.println("\n--- ZUGBEWERTUNG KI " + currentPlayerId + " ---");
+        System.out.println(evaluation.evaluation);
+        System.out.println("----------------------------------------\n");
 
         // KI-spezifische Phase beenden
         aiThinking = false;
@@ -1592,7 +1598,6 @@ public class SantoriniGUI extends PApplet {
             phase = GamePhase.MOVE_WORKER;
         }
     }
-
     /**
      * Wird am Ende des Spiels aufgerufen, um die KI-Agenten zu benachrichtigen
      * und die Gewichte anzupassen.

@@ -178,7 +178,7 @@ public class SantoriniGame {
         System.out.println("-------------------------------\n");
     }
 
-// ... (Rest der Klasse bleibt unverändert)
+// ... (Rest der Klasse bleibt unverändert)2
 
     private void handleHumanTurn(String playerId) {
         boolean validMove = false;

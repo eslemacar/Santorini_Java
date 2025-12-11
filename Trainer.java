@@ -44,7 +44,7 @@ public class Trainer {
 
         // Startspieler zufällig wählen
         currentIdx = random.nextInt(2);
-        currentPlayer = currentIdx == 0 ? "P1" : "P2";
+        currentPlayer = playerIds.get(currentIdx);
 
         boolean gameOver = false;
         String winner = null;
@@ -56,10 +56,11 @@ public class Trainer {
             Move move = eval.move;
 
             if (move == null) {
-                // Unmöglicher Zug -> neutral
-                for (SmartAgent sa : agents) sa.notifyGameEnd(0.0);
+                // Blockade -> Gewinner ist der Gegner
                 gameOver = true;
-                winner = null;
+                // Gewinner ist der Spieler VOR dem blockierten Spieler
+                winner = playerIds.get((currentIdx + 1) % 2);
+                break;
             } else {
                 board.moveWorker(currentPlayer, move.getMoveFrom(), move.getMoveTo());
                 if (move.getBuildAt() != null) board.buildStructure(move.getBuildAt());
@@ -70,17 +71,31 @@ public class Trainer {
                 }
             }
 
-            // Belohnung
-            for (SmartAgent sa : agents) {
-                if (winner == null) sa.notifyGameEnd(0.0);
-                else if (sa.getPlayerId().equals(winner)) sa.notifyGameEnd(1.0);
-                else sa.notifyGameEnd(-1.0);
+            // NUR weiter zum nächsten Spieler, wenn das Spiel nicht vorbei ist
+            if (!gameOver) {
+                currentIdx = (currentIdx + 1) % 2;
+                currentPlayer = playerIds.get(currentIdx);
+                moves++;
             }
-
-            currentIdx = (currentIdx + 1) % 2;
-            currentPlayer = playerIds.get(currentIdx);
-            moves++;
         }
+
+        // --- LERNSCHRITT NACH ENDE DER EPISODE (KORRIGIERT: Nur einmalige Belohnung) ---
+        double rewardP1 = 0.0;
+        double rewardP2 = 0.0;
+
+        if (winner != null) {
+            if (winner.equals("P1")) {
+                rewardP1 = 1000.0;
+                rewardP2 = -1000.0;
+            } else if (winner.equals("P2")) {
+                rewardP1 = -1000.0;
+                rewardP2 = 1000.0;
+            }
+        }
+
+        // Benachrichtige Agenten nur einmal am Ende. (wichtig für die Batch-TD-Logik in SmartAgent)
+        agents.get(0).notifyGameEnd(rewardP1); // P1
+        agents.get(1).notifyGameEnd(rewardP2); // P2
 
         return winner == null ? "Unentschieden" : winner;
     }
