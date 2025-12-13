@@ -18,7 +18,7 @@ public class ReflexAgent {
     private final Random random;
 
     // --- LERNPARAMETER ---
-    private static double ALPHA = 0.005;   // Lernrate
+    private static double ALPHA = 0.0005;   // Lernrate
     private static double EPSILON = 0.15;  // Explorationsrate (0 = keine Exploration)
 
     // --- DYNAMISCHE GEWICHTE ---
@@ -30,7 +30,8 @@ public class ReflexAgent {
     private static final int W_CENTER_CONTROL_IDX = 4;
     private static final int W_MOVE_UP_IDX = 5;
     private static final int W_MOVE_DOWN_IDX = 6;
-    private static final int NUM_WEIGHTS = 7;
+    private static final int W_BLOCK_OPP_WIN_IDX = 7; // NEUES FEATURE
+    private static final int NUM_WEIGHTS = 8;        // NEUE ANZAHL
 
     // --- HISTORY für Learning (pro Spiel) ---
     // speichert Feature-Vektoren, die während des Spiels gewählt wurden
@@ -44,12 +45,13 @@ public class ReflexAgent {
 
         // Standardinitialisierung (wie zuvor)
         weights[W_WIN_IDX] = 50000;
-        weights[W_ADVANCE_IDX] = 30;
-        weights[W_BLOCK_OPP_IDX] = 8;
+        weights[W_ADVANCE_IDX] = 50;
+        weights[W_BLOCK_OPP_IDX] = 15;
         weights[W_BUILD_THREAT_IDX] = 8;
         weights[W_CENTER_CONTROL_IDX] =6;
         weights[W_MOVE_UP_IDX] = 50;
         weights[W_MOVE_DOWN_IDX] = -10;
+        weights[W_BLOCK_OPP_WIN_IDX] = 10000;
 
         // Versuche beim Erzeugen Gewichte zu laden (falls vorhanden)
         try {
