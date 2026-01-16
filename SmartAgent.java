@@ -1,7 +1,5 @@
 // SmartAgent.java
-// Extends ReflexAgent to provide convenience training hooks (save/load + notifyGameEnd)
-
-
+// Extends ReflexAgent
 import java.io.IOException;
 
 
@@ -18,13 +16,13 @@ public class SmartAgent extends ReflexAgent {
      * This will update weights and persist them to disk.
      */
     public void notifyGameEnd(double finalReward) {
-// Update weights based on feature history collected during the game
+
         updateWeights(finalReward);
-// Save updated weights so training persists across runs
+
         try {
             saveWeights();
         } catch (Exception e) {
-// ReflexAgent.saveWeights prints its own message on failure; ignore here
+
         }
     }
 }

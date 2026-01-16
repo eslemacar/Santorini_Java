@@ -21,7 +21,7 @@ public class Board {
         }
     }
 
-    // --- Zustand abfragen ---
+    //  Zustand abfragen
 
     public String getWorkerIdAt(int col, int row) {
         if (!isValidCoord(col, row)) return null;
@@ -64,7 +64,7 @@ public class Board {
         return getLevel(moveTo[0], moveTo[1]) == WIN_LEVEL;
     }
 
-    // --- Klonen ---
+    //  Klonen
     @Override
     public Board clone() {
         Board copy = new Board(this.playerIds);
@@ -85,7 +85,7 @@ public class Board {
         return copy;
     }
 
-    // --- Nachbarn ---
+    //  Nachbarn
     public List<int[]> getNeighbors(int[] coord) {
         List<int[]> neighbors = new ArrayList<>();
         if (coord == null) return neighbors;
@@ -105,7 +105,7 @@ public class Board {
         return neighbors;
     }
 
-    // --- gültige Ziele ---
+    //  gültige Ziele
     public List<int[]> getValidMoveTargets(int[] workerCoord) {
         List<int[]> targets = new ArrayList<>();
         if (workerCoord == null) return targets;
@@ -138,7 +138,7 @@ public class Board {
         return targets;
     }
 
-    // --- Änderungen am Board ---
+    //  Änderungen am Board
 
     public boolean placeWorker(String playerId, int workerId, int col, int row) {
         if (!playerIds.contains(playerId)) return false;
@@ -174,7 +174,7 @@ public class Board {
         return true;
     }
 
-    // --- Arbeiter Hilfen ---
+    //  Arbeiter Hilfen
 
     public Worker getWorker(String playerId, int[] coord) {
         if (!playerIds.contains(playerId)) return null;
@@ -193,7 +193,7 @@ public class Board {
         return new ArrayList<>(playerIds);
     }
 
-    // --- Anzeige ---
+    //  Anzeige
     public void display(String currentPlayerId) {
         System.out.println("-------------------------------------");
         System.out.println("Am Zug: " + currentPlayerId);

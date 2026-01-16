@@ -41,7 +41,7 @@ public class SantoriniGame {
     }
 
 
-    // --- Spielsteuerung ---
+    //  Spielsteuerung
 
     public void run() {
         System.out.println("Willkommen bei Santorini (mit " + playerIds.size() + " Spielern)! P1 ist Mensch.");
@@ -124,15 +124,12 @@ public class SantoriniGame {
         }
     }
 
-// IN SantoriniGame.java
-
-// ... (Rest der Klasse bleibt unverändert bis handleAiTurn)
 
     private void handleAiTurn(String playerId) {
         System.out.println("\n--- " + playerId + " (KI) ist am Zug ---");
         ReflexAgent agent = agents.get(playerId);
 
-        // Bonus 1: Simulation einer Bedenkzeit
+        //  Simulation einer Bedenkzeit
         long startTime = System.nanoTime();
         try {
             TimeUnit.MILLISECONDS.sleep(new Random().nextInt(500) + 200);
@@ -145,7 +142,7 @@ public class SantoriniGame {
         long endTime = System.nanoTime();
         double elapsedSeconds = (endTime - startTime) / 1_000_000_000.0;
 
-        // 1. ZUG-ZEIT-REGEL PRÜFEN (bleibt gleich)
+        // 1. ZUG-ZEIT-REGEL PRÜFEN
         System.out.println("KI-Bedenkzeit: " + String.format("%.2f", elapsedSeconds) + "s");
 
         if (elapsedSeconds > 10.0) {
@@ -172,7 +169,7 @@ public class SantoriniGame {
         // 2. Zug ausführen
         executeMove(playerId, move);
 
-        // 3. Zugbewertung (Anforderung 2b) - NEUE LOGIK FÜR DETAILLIERTE AUSGABE
+        // 3. Zugbewertung
         System.out.println("\n--- ZUGBEWERTUNG (KI-Sicht) ---");
         System.out.println(evaluation.evaluation); // Gibt den detaillierten Utility-String aus
         System.out.println("-------------------------------\n");
@@ -234,7 +231,7 @@ public class SantoriniGame {
         return false;
     }
 
-    // --- Validierung und Parsing ---
+    //  Validierung und Parsing
 
     private boolean isValidMoveAction(String playerId, Move move) {
         int[] moveFrom = move.getMoveFrom();
@@ -298,9 +295,8 @@ public class SantoriniGame {
                 return false;
             }
             // Wenn der Arbeiter der eigene ist, kann es nur das moveFrom-Feld sein (da sonst der moveTo-Zug ungültig wäre).
-            // Da wir bereits auf moveFrom != buildAt prüfen, ist dieser Fall unnötig komplex, aber wir lassen ihn für Klarheit.
 
-            // Die wichtigste Prüfung: Wenn es besetzt ist und es NICHT das Feld ist, das wir gerade räumen, ist es ungültig.
+            // Wenn es besetzt ist und es nicht das Feld ist, ist es ungültig.
             System.out.println("Fehler: " + coordToNotation(buildAt) + " ist bereits besetzt.");
             return false;
         }
@@ -353,7 +349,7 @@ public class SantoriniGame {
         }
     }
 
-    // --- Notationshelfer ---
+    //  Notationshelfer
 
     private int[] notationToCoord(String notation) {
         if (notation == null || notation.length() != 2) return null;
@@ -374,12 +370,11 @@ public class SantoriniGame {
         return String.valueOf(colChar) + rowChar;
     }
 
-    // Überladene Methode
     private String coordToNotation(int col, int row) {
         return coordToNotation(new int[]{col, row});
     }
 
-    // --- Hauptmethode zum Starten des Spiels ---
+    //  Hauptmethode zum Starten des Spiels
 
     public static void main(String[] args) {
         Scanner sharedScanner = new Scanner(System.in);

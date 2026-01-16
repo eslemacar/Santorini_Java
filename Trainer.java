@@ -14,7 +14,7 @@ public class Trainer {
     public Trainer(int episodes, int maxMovesPerGame) {
         this.maxMovesPerGame = maxMovesPerGame;
 
-        // Wir brauchen die Episoden-Zahl nur für runTraining(), nicht für einzelne Episode
+        // die Episoden-Zahl nur für runTraining()
     }
 
     /** Vollständiges Training ausführen */
@@ -71,7 +71,7 @@ public class Trainer {
                 }
             }
 
-            // NUR weiter zum nächsten Spieler, wenn das Spiel nicht vorbei ist
+            // nur weiter zum nächsten Spieler, wenn das Spiel nicht vorbei ist
             if (!gameOver) {
                 currentIdx = (currentIdx + 1) % 2;
                 currentPlayer = playerIds.get(currentIdx);
@@ -79,7 +79,7 @@ public class Trainer {
             }
         }
 
-        // --- LERNSCHRITT NACH ENDE DER EPISODE (KORRIGIERT: Nur einmalige Belohnung) ---
+        //  LERNSCHRITT NACH ENDE DER EPISODE
         double rewardP1 = 0.0;
         double rewardP2 = 0.0;
 
@@ -93,7 +93,7 @@ public class Trainer {
             }
         }
 
-        // Benachrichtige Agenten nur einmal am Ende. (wichtig für die Batch-TD-Logik in SmartAgent)
+        // Benachrichtige Agenten nur einmal am Ende
         agents.get(0).notifyGameEnd(rewardP1); // P1
         agents.get(1).notifyGameEnd(rewardP2); // P2
 

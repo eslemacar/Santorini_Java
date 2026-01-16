@@ -15,13 +15,13 @@ public class TrainingGUI extends JFrame {
 
         setLayout(new BorderLayout());
 
-        // --- Log Fenster ---
+        //  Log Fenster
         logArea = new JTextArea();
         logArea.setEditable(false);
         JScrollPane scroll = new JScrollPane(logArea);
         add(scroll, BorderLayout.CENTER);
 
-        // --- Untere Leiste mit Fortschritt + Button ---
+        //  Untere Leiste mit Fortschritt + Button
         JPanel bottom = new JPanel(new BorderLayout());
 
         progressBar = new JProgressBar(0, 100);

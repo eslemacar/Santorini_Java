@@ -17,11 +17,11 @@ public class ReflexAgent {
     private final String playerId;
     private final Random random;
 
-    // --- LERNPARAMETER ---
+    //  LERNPARAMETER
     private static double ALPHA = 0.0005;   // Lernrate
     private static double EPSILON = 0.15;  // Explorationsrate (0 = keine Exploration)
 
-    // --- DYNAMISCHE GEWICHTE ---
+    //  DYNAMISCHE GEWICHTE
     private final double[] weights;
     private static final int W_WIN_IDX = 0;
     private static final int W_ADVANCE_IDX = 1;
@@ -33,7 +33,7 @@ public class ReflexAgent {
     private static final int W_BLOCK_OPP_WIN_IDX = 7; // NEUES FEATURE
     private static final int NUM_WEIGHTS = 8;        // NEUE ANZAHL
 
-    // --- HISTORY für Learning (pro Spiel) ---
+    //  HISTORY für Learning (pro Spiel)
     // speichert Feature-Vektoren, die während des Spiels gewählt wurden
     private final List<double[]> featureHistory;
 
@@ -65,7 +65,7 @@ public class ReflexAgent {
         return playerId;
     }
 
-    // --- Datei-Pfade für Gewichtsspeicherung ---
+    //  Datei-Pfade für Gewichtsspeicherung
     private Path getWeightsPath() {
         String filename = "weights_" + playerId + ".csv";
         return Paths.get(filename);
@@ -164,23 +164,23 @@ public class ReflexAgent {
         int[] to = move.getMoveTo();
         int[] build = move.getBuildAt();
 
-        // Level-Informationen
+        // LevelInformationen
         int currentLevel = board.getLevel(from[0], from[1]);
         int targetLevel = board.getLevel(to[0], to[1]);
         int buildLevelBefore = (build != null) ? board.getLevel(build[0], build[1]) : -1;
         int buildLevelAfter = (buildLevelBefore != -1 && buildLevelBefore < Board.MAX_LEVEL) ? buildLevelBefore + 1 : buildLevelBefore;
 
-        // 0. W_WIN
+        //  W_WIN
         if (move.getBuildAt() == null && board.checkWin(to)) {
             features[W_WIN_IDX] = 1.0;
         }
 
-        // 1. W_ADVANCE (Vorbereitung auf Level 3)
+        //  W_ADVANCE (Vorbereitung auf Level 3)
         if (targetLevel == 2 || targetLevel == 3) {
             features[W_ADVANCE_IDX] = (targetLevel == 3 ? 3.0 : 1.0);
         }
 
-        // 2. W_BLOCK_OPP / W_BUILD_THREAT
+        //  W_BLOCK_OPP / W_BUILD_THREAT
         if (build != null) {
             if (buildLevelAfter == 3) {
                 features[W_BUILD_THREAT_IDX] = 1.0;
@@ -190,13 +190,13 @@ public class ReflexAgent {
             }
         }
 
-        // 3. W_CENTER_CONTROL
+        //  W_CENTER_CONTROL
         int distCenter = Math.abs(to[0] - 2) + Math.abs(to[1] - 2);
         if (distCenter <= 1) {
             features[W_CENTER_CONTROL_IDX] = (2 - distCenter);
         }
 
-        // 4. W_MOVE_UP / W_MOVE_DOWN
+        //  W_MOVE_UP / W_MOVE_DOWN
         if (targetLevel > currentLevel) {
             features[W_MOVE_UP_IDX] = (targetLevel - currentLevel);
         } else if (targetLevel < currentLevel) {
@@ -231,7 +231,7 @@ public class ReflexAgent {
      */
     public synchronized void updateWeights(double finalReward) {
         if (featureHistory.isEmpty()) {
-            // Falls leer (z. B. KI spielte gar nicht), trotzdem kleine Anpassung (optional)
+
             return;
         }
 
@@ -297,7 +297,7 @@ public class ReflexAgent {
         return new MoveEvaluation(finalMove, explanation);
     }
 
-    // --- Hilfsfunktionen (wie vorher) ---
+    //  Hilfsfunktionen
 
     private String generateExplanation(Move move, int utility, Board board) {
         if (utility == (int)weights[W_WIN_IDX]) return "ULTIMATE UTILITY: Gewinnzug! Das Spiel wird beendet.";
@@ -368,7 +368,7 @@ public class ReflexAgent {
         return false;
     }
 
-    // --- Get/Set Hilfen (nützlich für UI / Debug) ---
+    //  Get/Set Hilfen
     public double[] getWeightsCopy() {
         double[] copy = new double[weights.length];
         System.arraycopy(weights, 0, copy, 0, weights.length);
